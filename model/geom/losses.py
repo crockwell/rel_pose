@@ -81,23 +81,6 @@ def fixed_geodesic_loss(Ps, Gs, gamma=0.9, train_val='train'):
 
     return geodesic_loss_tr, geodesic_loss_rot, rotation_mag, metrics
 
-def get_epipolar_line(Ps, B):
-    Rt = Ps.matrix()[:,:3]
-    R = Rt[:,:3,:3]
-    t = Rt[:,:,3]
-
-    # cross prod rep of t
-    t_x = torch.zeros([B, 3, 3]).cuda()
-    t_x[:,0,1] = -t[:,2]
-    t_x[:,0,2] = t[:,1]
-    t_x[:,1,0] = t[:,2]
-    t_x[:,1,2] = -t[:,0]
-    t_x[:,2,0] = -t[:,1]
-    t_x[:,2,1] = t[:,0]
-    E = (R @ t_x)
-    return E
-
-
 
 def geodesic_loss(Ps, Gs, graph, gamma=0.9, do_scale=True, train_val='train'):
     """ Loss function for training network """

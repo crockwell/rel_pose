@@ -18,27 +18,21 @@ from .augmentation import RGBDAugmentor
 from .rgbd_utils import *
 
 class RGBDDataset(data.Dataset):
-    def __init__(self, name, datapath, n_frames=4, crop_size=[384,512], do_aug=True, subepoch=None, \
-                scale_aug=True, is_training=True, gpu=0, load_img_tensors=False, max_scale_aug=0.25,
-                no_depth=False, use_fixed_intrinsics=False, blackwhite=False, blackwhite_pt5=False, 
+    def __init__(self, name, datapath, n_frames=4, crop_size=[384,512], subepoch=None, \
+                is_training=True, gpu=0, use_fixed_intrinsics=False, 
                 use_optical_flow=False, streetlearn_interiornet_type=None,
                 use_mini_dataset=False):
         """ Base class for RGBD dataset """
-        self.aug = None
         self.root = datapath
         self.name = name
         self.streetlearn_interiornet_type = streetlearn_interiornet_type
 
         self.n_frames = n_frames
 
-        self.no_depth = no_depth
-
         self.use_optical_flow = use_optical_flow
         
-        self.scale_aug = scale_aug
-        if do_aug:
-            self.aug = RGBDAugmentor(crop_size=crop_size, scale_aug=scale_aug, max_scale=max_scale_aug, 
-                use_fixed_intrinsics=use_fixed_intrinsics, blackwhite=blackwhite, blackwhite_pt5=blackwhite_pt5, datapath=datapath)
+        self.aug = RGBDAugmentor(crop_size=crop_size, 
+            use_fixed_intrinsics=use_fixed_intrinsics, datapath=datapath)
         print(self.name)
         self.matterport = False
         self.streetlearn_interiornet = False
@@ -97,8 +91,7 @@ class RGBDDataset(data.Dataset):
             class_rot = torch.from_numpy(class_rot)
             class_tr = torch.from_numpy(class_tr)
 
-            if self.aug is not None:
-                images, poses, intrinsics, _ = self.aug(images, poses, intrinsics)
+            images, poses, intrinsics, _ = self.aug(images, poses, intrinsics)
             
             return images, poses, intrinsics, class_rot, class_tr
         elif self.streetlearn_interiornet:
@@ -125,8 +118,7 @@ class RGBDDataset(data.Dataset):
                     poses = torch.from_numpy(poses)
                     intrinsics = torch.from_numpy(intrinsics)
 
-                    if self.aug is not None:
-                        images, poses, intrinsics, _ = self.aug(images, poses, intrinsics)
+                    images, poses, intrinsics, _ = self.aug(images, poses, intrinsics)
                     
                     return images, poses, intrinsics, angles
                 except:

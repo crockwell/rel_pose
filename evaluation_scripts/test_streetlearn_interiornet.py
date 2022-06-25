@@ -244,67 +244,40 @@ if __name__ == '__main__':
     parser.add_argument('--num_input_images', type=int, default=7)
     parser.add_argument('--feature_width', type=int, default=7)
     parser.add_argument('--normalized_coords', action="store_true", default=False)
-    parser.add_argument('--normalize_quats', action="store_true", default=False)
-    parser.add_argument('--prediction_pose_type', choices=("change", "absolute", 'classify'))
     parser.add_argument('--predict_normalized_pose', action="store_true", default=False)
-    parser.add_argument('--normalize_in_dataloader', action="store_true", default=False)
     parser.add_argument('--eval_on_train_set', action="store_true", default=False)
     parser.add_argument('--eval_on_test_set', action="store_true", default=False)
     parser.add_argument('--eval_on_test_set_hard', action="store_true", default=False)
-    parser.add_argument('--feature_resolution', type=int, default=7)
-    parser.add_argument('--transformer_connectivity', default='cross_image', choices=("in_image","cross_image", "all", 'in_image_stacked', 'difference'))
     parser.add_argument('--dataset', default='interiornet', choices=("interiornet", 'streetlearn'))
     parser.add_argument('--cross_indices', nargs='+', type=int, help='indices for cross-attention, if using cross_image transformer connectivity')
-    parser.add_argument('--fundamental_temp', type=float, default=1.0)
     parser.add_argument('--positional_encoding', nargs='+', type=int, help='indices for positional_encoding if using cross_image transformer connectivity')
     parser.add_argument('--outer_prod', nargs='+', type=int, help='indices for fundamental calc if using cross_image transformer connectivity')
     parser.add_argument('--pool_transformer_output', action="store_true", default=False)
-    parser.add_argument('--weird_feats', action="store_true", default=False)
     parser.add_argument('--pool_size', type=int, default=12)
     parser.add_argument('--use_big_transformer', action="store_true", default=False)
-    parser.add_argument('--use_droidslam_encoder', choices=("True", "False"))
-    parser.add_argument('--transformer_depth', type=int, default=12)
-    parser.add_argument('--use_medium_transformer', action="store_true", default=False)
+    parser.add_argument('--transformer_depth', type=int, default=6)
     parser.add_argument('--pos_encoding_size', type=int, default=0, choices=(0,2,6,10,18,34,66))
-    parser.add_argument('--no_pretrained_transformer', action='store_true')
     parser.add_argument('--use_procrustes', action='store_true')    
     parser.add_argument('--use_camera_encodings', action="store_true", default=False)
     parser.add_argument('--gamma', type=float, default=0.9)    
-    parser.add_argument('--squeeze_excite', nargs='+', type=int, help='indices for fundamental calc if using cross_image transformer connectivity')    
     parser.add_argument('--use_essential_units', action='store_true')
     parser.add_argument('--fund_resid', action='store_true')
-    parser.add_argument('--squeeze_excite_big', action='store_true')
-    parser.add_argument('--max_scale_aug', type=float, default=0.25)
     parser.add_argument('--cross_features', action='store_true')
     parser.add_argument('--epi_dist_sub', type=float, default=1.0)
     parser.add_argument('--first_head_only', action='store_true')
-    parser.add_argument('--epipolar_loss_both_dirs', action='store_true')
-    parser.add_argument('--attn_scale', type=float, default=1.0)
-    parser.add_argument('--attn_shift', type=float, default=0.0)
-    parser.add_argument('--use_sigmoid_attn', action='store_true')
-    parser.add_argument('--use_vo_mlp', action='store_true')
-    parser.add_argument('--use_test_bn', action='store_true')
     parser.add_argument('--pwc_big', action='store_true')
-    parser.add_argument('--no_pretrained_resnet', action='store_true')
     parser.add_argument('--supervise_epi', action='store_true')  
     parser.add_argument('--use_single_softmax', action='store_true')  
-=    parser.add_argument('--seperate_tf_qkv', action='store_true')
+    parser.add_argument('--seperate_tf_qkv', action='store_true')
     parser.add_argument('--l1_pos_encoding', action='store_true')
-    parser.add_argument('--use_medium_transformer_3head', action='store_true')
     parser.add_argument('--viz', action='store_true')
 
-    parser.add_argument('--sparse_plane_baseline', action='store_true')     
     parser.add_argument('--cnn_attn_plus_feats', action='store_true')
-    parser.add_argument('--use_pwc_encoder', action="store_true", default=False)
     parser.add_argument('--attn_one_way', action='store_true')
     parser.add_argument('--streetlearn_interiornet_type', default='', choices=('',"nooverlap","T",'nooverlapT'))
 
-    parser.add_argument('--use_cnn_decoder', action='store_true')
-    parser.add_argument('--use_positional_images', action='store_true')
     parser.add_argument('--cnn_decoder_use_essential', action='store_true')
-    parser.add_argument('--cnn_decode_each_head', action='store_true')    
     parser.add_argument('--use_fixed_intrinsics', action='store_true')
-    parser.add_argument('--clustered_dim', type=int, default=0)
     parser.add_argument('--no_pos_encoding', action='store_true')
     parser.add_argument('--noess', action='store_true')
 
@@ -342,14 +315,6 @@ if __name__ == '__main__':
             from data_readers.streetlearn import test_split, cur_path#, train_split_for_eval
             output_folder = 'streetlearn_test'
             dset = test_split
-
-    if args.use_droidslam_encoder == 'True':
-        args.use_droidslam_encoder = True
-    else:
-        args.use_droidslam_encoder = False
-
-
-    args.no_pretrained_transformer = True
 
     print('performing evaluation on %s set using model %s' % (output_folder, args.checkpoint_dir))
 
@@ -459,36 +424,21 @@ if __name__ == '__main__':
 
         print(preds[3:])
 
-        if args.prediction_pose_type == 'classify':
-            metrics['_class_loss_x'].append(geo_metrics['test_class_loss_x'])
-            metrics['_class_loss_y'].append(geo_metrics['test_class_loss_y'])
-            metrics['_class_loss_z'].append(geo_metrics['test_class_loss_z'])
-        else:
-            metrics['_geo_loss_tr'].append(geo_metrics['_geo_loss_tr'])
-            metrics['_geo_loss_rot'].append(geo_metrics['_geo_loss_rot'])
+        metrics['_geo_loss_tr'].append(geo_metrics['_geo_loss_tr'])
+        metrics['_geo_loss_rot'].append(geo_metrics['_geo_loss_rot'])
 
     print('did this many:',len(predictions['camera']['gts']['rot']))
 
-    if args.prediction_pose_type == 'classify':
-        print('mean class loss x', np.mean(np.array(metrics['_class_loss_x'])))
-        print('mean class loss y', np.mean(np.array(metrics['_class_loss_y'])))
-        print('mean class loss z', np.mean(np.array(metrics['_class_loss_z'])))
-    else:
-        print('mean geo tr', np.mean(np.array(metrics['_geo_loss_tr'])))
-        print('mean geo rot', np.mean(np.array(metrics['_geo_loss_rot'])))
+    print('mean geo tr', np.mean(np.array(metrics['_geo_loss_tr'])))
+    print('mean geo rot', np.mean(np.array(metrics['_geo_loss_rot'])))
 
     full_output_folder = os.path.join('output', args.exp, output_folder, args.weights[:-4])
     camera_metrics = eval_camera(predictions, full_output_folder)
     
 
     with open(os.path.join(full_output_folder, 'results.txt'), 'w') as f:
-        if args.prediction_pose_type == 'classify':
-            print('mean class loss x', np.mean(np.array(metrics['_class_loss_x'])), file=f)
-            print('mean class loss y', np.mean(np.array(metrics['_class_loss_y'])), file=f)
-            print('mean class loss z', np.mean(np.array(metrics['_class_loss_z'])), file=f)
-        else:
-            print('mean geo tr', np.mean(np.array(metrics['_geo_loss_tr'])), file=f)
-            print('mean geo rot', np.mean(np.array(metrics['_geo_loss_rot'])), file=f)
+        print('mean geo tr', np.mean(np.array(metrics['_geo_loss_tr'])), file=f)
+        print('mean geo rot', np.mean(np.array(metrics['_geo_loss_rot'])), file=f)
         for k in camera_metrics:
             print(k, camera_metrics[k], file=f)
         #print(camera_metrics, file=f)

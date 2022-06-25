@@ -190,10 +190,8 @@ def get_positional_encodings(B, N, intrinsics=None, use_fixed_intrinsics=False):
 class CrossAttention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., \
                 proj_drop=0., outer_prod=False, positional_encoding=False,
-                fundamental_temp=1.0, squeeze_excite=False,
                 use_essential_units=False, cross_features=False, get_attn_scores=False,
-                use_sigmoid_attn=False, attn_scale=1, attn_shift=0, epipolar_both_dirs=False,
-                first_head_only=False, not_get_outer_prods=False, attn_one_way=False,
+                not_get_outer_prods=False, attn_one_way=False,
                 use_single_softmax=False, cnn_attn_plus_feats=False, seperate_tf_qkv=False,
                 use_fixed_intrinsics=False, no_pos_encoding=False, noess=False, l1_pos_encoding=False):
         super().__init__()
@@ -236,16 +234,11 @@ class CrossAttention(nn.Module):
         else:
             self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
-        self.fundamental_temp = fundamental_temp
 
         self.use_essential_units = use_essential_units
         self.cross_features = cross_features
         self.get_attn_scores = get_attn_scores
-        self.use_sigmoid_attn = use_sigmoid_attn
-        self.attn_scale = attn_scale
         self.attn_shift = attn_shift
-        self.epipolar_both_dirs = epipolar_both_dirs
-        self.first_head_only = first_head_only
         self.not_get_outer_prods = not_get_outer_prods
         self.attn_one_way = attn_one_way
         self.use_single_softmax = use_single_softmax
@@ -265,11 +258,8 @@ class CrossAttention(nn.Module):
                 k2, v2 = self.qkv2(x2).reshape(B, N, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
             else:
                 k2 = self.qkv2(x2).reshape(B, N, 1, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)[0]
-            attn_2 = (q1 @ k2.transpose(-2, -1)) * self.scale * self.fundamental_temp
-            if self.use_sigmoid_attn:
-                attn_fundamental_2 = torch.sigmoid(attn_2*self.attn_scale-self.attn_shift)
-            else:
-                attn_fundamental_2 = attn_2.softmax(dim=-1)
+            attn_2 = (q1 @ k2.transpose(-2, -1)) * self.scale
+            attn_fundamental_2 = attn_2.softmax(dim=-1)
             
             if self.cnn_attn_plus_feats:
                 positional = get_positional_encodings(B, N, intrinsics=intrinsics, use_fixed_intrinsics=self.use_fixed_intrinsics).cuda() # shape B,N,6
@@ -300,34 +290,8 @@ class CrossAttention(nn.Module):
             q2, k2, v2 = qkv2[0], qkv2[1], qkv2[2]   # make torchscript happy (cannot use tensor as tuple)
 
         if self.outer_prod and not self.noess:
-            attn_1 = (q2 @ k1.transpose(-2, -1)) * self.scale * self.fundamental_temp
-            attn_2 = (q1 @ k2.transpose(-2, -1)) * self.scale * self.fundamental_temp
-
-            if self.use_sigmoid_attn:
-                # still do softmax on second two heads if first head only 
-                if self.first_head_only:
-                    attn_fundamental_2 = torch.empty_like(attn_2)
-                    attn_fundamental_2[:,:1] = torch.sigmoid(attn_2[:,:1]*self.attn_scale-self.attn_shift)
-                    attn_fundamental_2[:,1:] = attn_2[:,1:].softmax(dim=-1) * attn_2[:,1:].softmax(dim=-2)
-                else:
-                    attn_fundamental_2 = torch.sigmoid(attn_2*self.attn_scale-self.attn_shift)
-
-                if self.epipolar_both_dirs:
-                    if self.first_head_only:
-                        attn_fundamental_1 = torch.empty_like(attn_1)
-                        attn_fundamental_1[:,:1] = torch.sigmoid(attn_1[:,:1]*self.attn_scale-self.attn_shift)
-                        attn_fundamental_1[:,1:] = attn_1[:,1:].softmax(dim=-1) * attn_1[:,1:].softmax(dim=-2)
-                    else:
-                        attn_fundamental_1 = torch.sigmoid(attn_1*self.attn_scale-self.attn_shift)
-                else:
-                    attn_fundamental_1 = attn_1.softmax(dim=-1) * attn_1.softmax(dim=-2)
-            else:
-                if self.use_single_softmax:
-                    attn_fundamental_1 = attn_1.softmax(dim=-1)
-                    attn_fundamental_2 = attn_2.softmax(dim=-1)
-                else:
-                    attn_fundamental_1 = attn_1.softmax(dim=-1) * attn_1.softmax(dim=-2)
-                    attn_fundamental_2 = attn_2.softmax(dim=-1) * attn_2.softmax(dim=-2)
+            attn_1 = (q2 @ k1.transpose(-2, -1)) * self.scale
+            attn_2 = (q1 @ k2.transpose(-2, -1)) * self.scale
 
             if self.not_get_outer_prods:
                 return attn_fundamental_2, attn_fundamental_1
@@ -434,10 +398,9 @@ class CrossBlock(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
                  drop_path=0., act_layer=nn.GELU, \
                  norm_layer=nn.LayerNorm, outer_prod=False, positional_encoding=False,
-                 fundamental_temp=1.0, squeeze_excite=False,
-                 use_essential_units=False,squeeze_excite_big=False, cross_features=False,
-                 get_attn_scores=False, use_sigmoid_attn=False, attn_scale=1, attn_shift=0,
-                 epipolar_both_dirs=False, first_head_only=False, not_get_outer_prods=False,
+                 use_essential_units=False,cross_features=False,
+                 get_attn_scores=False, 
+                 not_get_outer_prods=False,
                  attn_one_way=False, use_single_softmax=False, cnn_attn_plus_feats=False, seperate_tf_qkv=False,
                  use_fixed_intrinsics=False, no_pos_encoding=False, noess=False, l1_pos_encoding=False):
         super().__init__()
@@ -445,11 +408,8 @@ class CrossBlock(nn.Module):
         self.cross_attn = CrossAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, \
                                 attn_drop=attn_drop, proj_drop=drop, \
                                 outer_prod=outer_prod, positional_encoding=positional_encoding,
-                                fundamental_temp=fundamental_temp, 
-                                squeeze_excite=squeeze_excite, use_essential_units=use_essential_units,
+                                use_essential_units=use_essential_units,
                                 cross_features=cross_features,get_attn_scores=get_attn_scores,
-                                use_sigmoid_attn=use_sigmoid_attn, attn_scale=attn_scale, attn_shift=attn_shift,
-                                epipolar_both_dirs=epipolar_both_dirs, first_head_only=first_head_only,
                                 not_get_outer_prods=not_get_outer_prods, attn_one_way=attn_one_way,
                                 use_single_softmax=use_single_softmax, cnn_attn_plus_feats=cnn_attn_plus_feats,
                                 seperate_tf_qkv=seperate_tf_qkv, use_fixed_intrinsics=use_fixed_intrinsics,
@@ -524,7 +484,7 @@ class CrossBlock(nn.Module):
 class Attention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., \
                 proj_drop=0., outer_prod=False, positional_encoding=False,
-                fundamental_temp=1.0, use_essential_units=False,
+                use_essential_units=False,
                 use_fixed_intrinsics=False):
         super().__init__()
         dim_in = dim
@@ -550,7 +510,6 @@ class Attention(nn.Module):
             self.proj_drop = nn.Dropout(proj_drop)
             self.attn_drop = nn.Dropout(attn_drop)
 
-        self.fundamental_temp = fundamental_temp
         self.use_essential_units = use_essential_units
         self.use_fixed_intrinsics = use_fixed_intrinsics
 
@@ -559,7 +518,7 @@ class Attention(nn.Module):
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
         if self.outer_prod:
-            attn = (q @ k.transpose(-2, -1)) * self.scale * self.fundamental_temp
+            attn = (q @ k.transpose(-2, -1)) * self.scale
             attn_fundamental = attn.softmax(dim=-1) * attn.softmax(dim=-2)
 
             positional = get_positional_encodings(B, N, intrinsics=intrinsics, use_fixed_intrinsics=self.use_fixed_intrinsics).cuda() # shape B,N,6
@@ -598,15 +557,14 @@ class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
                  drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, \
-                 outer_prod=False,positional_encoding=False,fundamental_temp=1.0,
-                 squeeze_excite=False,use_essential_units=False,
-                 squeeze_excite_big=False, use_fixed_intrinsics=False):
+                 outer_prod=False,positional_encoding=False,
+                 use_essential_units=False,
+                 use_fixed_intrinsics=False):
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, \
                         attn_drop=attn_drop, proj_drop=drop, \
                         outer_prod=outer_prod, positional_encoding=positional_encoding,
-                        fundamental_temp=fundamental_temp, 
                         use_essential_units=use_essential_units, use_fixed_intrinsics=use_fixed_intrinsics)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
@@ -614,31 +572,6 @@ class Block(nn.Module):
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
         self.outer_prod = outer_prod
-
-        self.squeeze_excite = squeeze_excite
-        self.squeeze_excite_big = squeeze_excite_big
-        if self.squeeze_excite:
-            if self.squeeze_excite_big:
-                self.excitation = nn.Sequential(
-                    nn.Flatten(1,2),
-                    nn.Linear(dim*(dim//3+6), dim*(dim//3+6), bias=False),
-                    nn.ReLU(inplace=True),
-                    nn.Linear(dim*(dim//3+6), dim, bias=False),
-                    nn.Sigmoid()
-                )
-            else:
-                r = 16
-                self.squeeze = nn.Sequential(
-                                nn.Flatten(1,2),
-                                nn.Linear(dim*(dim//3+6), dim, bias=False),
-                                nn.ReLU(inplace=True)
-                )
-                self.excitation = nn.Sequential(
-                    nn.Linear(dim, dim // r, bias=False),
-                    nn.ReLU(inplace=True),
-                    nn.Linear(dim // r, dim, bias=False),
-                    nn.Sigmoid()
-                )
             
 
     def forward(self, x, camera=None, intrinsics=None):
@@ -647,26 +580,8 @@ class Block(nn.Module):
             fundamental = fundamental + self.drop_path(self.mlp(self.norm2(fundamental)))
             return fundamental
         else:
-            if self.squeeze_excite:
-                '''
-                we follow standard implementation: 
-                multiply input by excite (sigmoid so between 0-1) and have residual go around entire branch.
-                '''
-                (x, fundamental_in) = x
-                identity = x
-                if self.squeeze_excite_big:
-                    excite = self.excitation(fundamental_in).unsqueeze(1)
-                else:
-                    # x is B,N,D
-                    # fundamental is B,D,D
-                    squeeze = self.squeeze(fundamental_in) 
-                    # first we "squeeze" fundamental to single D
-                    excite = self.excitation(squeeze).unsqueeze(1)
-                    # excite is B,D - we modify how important is each D in x
-                out = excite * x
-            else:
-                identity = x 
-                out = x
+            identity = x 
+            out = x
             x = identity + self.drop_path(self.attn(self.norm1(out), camera, intrinsics=intrinsics))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
@@ -686,10 +601,10 @@ class VisionTransformer(nn.Module):
                  num_heads=12, mlp_ratio=4., qkv_bias=True, representation_size=None, distilled=False,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0., embed_layer=PatchEmbed, norm_layer=None,
                  act_layer=None, weight_init='', cross_image=[], outer_prod=[], 
-                 positional_encoding=[], fundamental_temp=1.0, 
-                 squeeze_excite=[], use_essential_units=False, squeeze_excite_big=False, cross_features=False,
-                 get_attn_scores=False, use_sigmoid_attn=False, attn_scale=1, attn_shift=0, epipolar_both_dirs=False,
-                 first_head_only=False, not_get_outer_prods=False, attn_one_way=False, use_single_softmax=False, 
+                 positional_encoding=[],
+                 use_essential_units=False, cross_features=False,
+                 get_attn_scores=False, 
+                 not_get_outer_prods=False, attn_one_way=False, use_single_softmax=False, 
                  cnn_attn_plus_feats=False, seperate_tf_qkv=False, use_fixed_intrinsics=False, no_pos_encoding=False,
                  noess=False, l1_pos_encoding=False):
         """
@@ -736,12 +651,10 @@ class VisionTransformer(nn.Module):
                             qkv_bias=qkv_bias, drop=drop_rate, attn_drop=attn_drop_rate, 
                             drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer, 
                             outer_prod=i in outer_prod, positional_encoding=i in positional_encoding,
-                            fundamental_temp=fundamental_temp, 
-                            squeeze_excite=i in squeeze_excite, use_essential_units=use_essential_units,
-                            squeeze_excite_big=squeeze_excite_big, cross_features=cross_features,
-                            get_attn_scores=get_attn_scores, use_sigmoid_attn=use_sigmoid_attn,
-                            attn_scale=attn_scale, attn_shift=attn_shift, epipolar_both_dirs=epipolar_both_dirs,
-                            first_head_only=first_head_only, not_get_outer_prods=not_get_outer_prods,
+                            use_essential_units=use_essential_units,
+                            cross_features=cross_features,
+                            get_attn_scores=get_attn_scores,
+                            not_get_outer_prods=not_get_outer_prods,
                             attn_one_way=attn_one_way, use_single_softmax=use_single_softmax, 
                             cnn_attn_plus_feats=cnn_attn_plus_feats, seperate_tf_qkv=seperate_tf_qkv,
                             use_fixed_intrinsics=use_fixed_intrinsics, no_pos_encoding=no_pos_encoding,
@@ -751,9 +664,8 @@ class VisionTransformer(nn.Module):
                             qkv_bias=qkv_bias, drop=drop_rate, attn_drop=attn_drop_rate, 
                             drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer, 
                             outer_prod=i in outer_prod, positional_encoding=i in positional_encoding,
-                            fundamental_temp=fundamental_temp, 
-                            squeeze_excite=i in squeeze_excite, use_essential_units=use_essential_units,
-                            squeeze_excite_big=squeeze_excite_big, use_fixed_intrinsics=use_fixed_intrinsics)
+                            use_essential_units=use_essential_units,
+                            use_fixed_intrinsics=use_fixed_intrinsics)
             block_list.append(this_block)
         self.blocks = nn.Sequential(*block_list)
         if not not_get_outer_prods:

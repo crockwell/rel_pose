@@ -7,17 +7,10 @@ import torch.nn.functional as F
 class RGBDAugmentor:
     """ perform augmentation on RGB-D video """
 
-    def __init__(self, crop_size, scale_aug=True, max_scale=0.25, use_fixed_intrinsics=False, blackwhite=False, blackwhite_pt5=False,
+    def __init__(self, crop_size, use_fixed_intrinsics=False,
                     datapath=None):
         self.crop_size = crop_size
-        self.scale_aug = scale_aug
         p_gray = 0.1
-        if blackwhite:
-            p_gray = 1.0
-            print('using grayscale for all training imgs!')
-        if blackwhite_pt5:
-            p_gray = 0.5
-            print('using 50 prob of gray')
         self.augcolor = transforms.Compose([
             transforms.ToPILImage(),
             transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.4/3.14),
@@ -87,9 +80,6 @@ class RGBDAugmentor:
 
     def __call__(self, images, poses, intrinsics, disps=None):
         images = self.color_transform(images)
-        #print(self.scale_aug)
-        if self.scale_aug:
-            return self.spatial_transform(images, disps, poses, intrinsics) # check intrin if augment..
 
         if self.streetlearn:
             return images, poses, intrinsics, disps
