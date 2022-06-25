@@ -31,27 +31,11 @@ def eval_camera(predictions):
         "rot": 30,
     }  # threshold for translation and rotation error to say prediction is correct.
 
-    '''
-    tran_logits = torch.stack(
-        [p["camera"]["logits"]["tran"] for p in predictions]
-    ).numpy()
-    rot_logits = torch.stack(
-        [p["camera"]["logits"]["rot"] for p in predictions]
-    ).numpy()
-    gt_tran_cls = torch.stack(
-        [p["camera"]["gts"]["tran_cls"] for p in predictions]
-    ).numpy()
-    gt_rot_cls = torch.stack(
-        [p["camera"]["gts"]["rot_cls"] for p in predictions]
-    ).numpy()
-    pred_tran = self.class2xyz(np.argmax(tran_logits, axis=1))
-    pred_rot = self.class2quat(np.argmax(rot_logits, axis=1))
-    '''
-    pred_tran = np.vstack(predictions["camera"]["preds"]["tran"])#([p["camera"]["preds"]["tran"] for p in predictions])
-    pred_rot = np.vstack(predictions["camera"]["preds"]["rot"])#([p["camera"]["preds"]["rot"] for p in predictions])
+    pred_tran = np.vstack(predictions["camera"]["preds"]["tran"])
+    pred_rot = np.vstack(predictions["camera"]["preds"]["rot"])
 
-    gt_tran = np.vstack(predictions["camera"]["gts"]["tran"]) #([p["camera"]["gts"]["tran"] for p in predictions])
-    gt_rot = np.vstack(predictions["camera"]["gts"]["rot"]) #([p["camera"]["gts"]["rot"] for p in predictions])
+    gt_tran = np.vstack(predictions["camera"]["gts"]["tran"])
+    gt_rot = np.vstack(predictions["camera"]["gts"]["rot"])
 
     top1_error = {
         "tran": np.linalg.norm(gt_tran - pred_tran, axis=1),
@@ -92,7 +76,6 @@ if __name__ == '__main__':
     parser.add_argument("--image_size", default=[384,512])
     parser.add_argument("--stereo", action="store_true")
     parser.add_argument("--disable_vis", action="store_true")
-    parser.add_argument("--plot_curve", action="store_true")
     parser.add_argument("--id", type=int, default=-1)
     parser.add_argument("--exp", default="droidslam")
     parser.add_argument("--checkpoint_dir")
@@ -130,7 +113,6 @@ if __name__ == '__main__':
     parser.add_argument('--attn_one_way', action='store_true')
     
     parser.add_argument('--cnn_decoder_use_essential', action='store_true')
-    parser.add_argument('--use_fixed_intrinsics', action='store_true')
     parser.add_argument('--no_pos_encoding', action='store_true')
     parser.add_argument('--noess', action='store_true')
 
@@ -149,7 +131,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     torch.multiprocessing.set_start_method('spawn')
 
-    from data_readers.matterport import val_split, test_split, cur_path#, train_split_for_eval
+    from data_readers.matterport import val_split, test_split, cur_path
 
     output_folder = 'matterport_val'
     dset = val_split
@@ -231,7 +213,7 @@ if __name__ == '__main__':
             rel_pose[3:] *= -1
         poses = np.vstack([base_pose, rel_pose]).astype(np.float32)
         poses = torch.from_numpy(poses).unsqueeze(0).cuda()
-        Ps = SE3(poses)#.inv()
+        Ps = SE3(poses)
 
         Gs = SE3.IdentityLike(Ps)
 
@@ -241,13 +223,12 @@ if __name__ == '__main__':
         class_tr = kmeans_trans.predict([[og_rel_pose[0], og_rel_pose[1], og_rel_pose[2]]])
         class_tr = torch.from_numpy(class_tr).unsqueeze(0).cuda()
 
-        # only 2 images so frame graph has no randomness
         N=2
         graph = OrderedDict()
         for ll in range(N):
             graph[ll] = [j for j in range(N) if ll!=j and abs(ll-j) <= 2]
             
-        intrinsics0 = intrinsics# / 8.0
+        intrinsics0 = intrinsics
         
         with torch.no_grad():
             poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics0)
@@ -263,7 +244,7 @@ if __name__ == '__main__':
             gt_rotation[3] *= -1
         predictions['camera']['gts']['rot'].append(gt_rotation)
 
-        preds = poses_est[0][0][1].data.cpu().numpy() # .inv() preds = poses_est[0][0][1].inv().data.cpu().numpy() #     
+        preds = poses_est[0][0][1].data.cpu().numpy()    
         pr_copy = np.copy(preds)
         preds[3] = pr_copy[6] # swap 3 & 6, we used W last; want W first in quat
         preds[6] = pr_copy[3]
@@ -287,4 +268,3 @@ if __name__ == '__main__':
         print('mean geo rot', np.mean(np.array(metrics['_geo_loss_rot'])), file=f)
         for k in camera_metrics:
             print(k, camera_metrics[k], file=f)
-        #print(camera_metrics, file=f)

@@ -15,7 +15,6 @@ import json
 from scipy.spatial.transform import Rotation as R
 
 cur_path = '/home/cnris/vl/ExtremeRotation_code/'
-#data_path = '/home/cnris/data/streetlearn'
 
 test_split = np.load(osp.join(cur_path, 'metadata/streetlearn/test_pair_rotation.npy'), allow_pickle=True)
 test_split = np.array(test_split, ndmin=1)[0]
@@ -33,7 +32,6 @@ class StreetLearn(RGBDDataset):
 
     @staticmethod 
     def is_test_scene(scene):
-        # print(scene, any(x in scene for x in test_split))
         return any(x in scene for x in test_split)
 
     def compute_rotation_matrix_from_two_matrices(self, m1, m2):
@@ -44,7 +42,6 @@ class StreetLearn(RGBDDataset):
     def compute_rotation_matrix_from_viewpoint(self, rotation_x, rotation_y, batch):
         rotax = rotation_x.view(batch, 1).type(torch.FloatTensor)
         rotay = - rotation_y.view(batch, 1).type(torch.FloatTensor)
-        # rotaz = torch.zeros(batch, 1)
 
         c1 = torch.cos(rotax).view(batch, 1)  # batch*1
         s1 = torch.sin(rotax).view(batch, 1)  # batch*1
@@ -101,7 +98,6 @@ class StreetLearn(RGBDDataset):
         
         dset_name = 'streetlearn'
 
-        #if 'nooverlap' in self.name:
         if valid:
             if self.streetlearn_interiornet_type == '' or \
                self.streetlearn_interiornet_type == 'nooverlap':

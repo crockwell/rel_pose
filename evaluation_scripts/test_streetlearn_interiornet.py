@@ -131,51 +131,6 @@ def eval_camera(predictions, save_folder):
     print("Results:", all_res)
     return all_res
 
-
-    '''
-    acc_threshold = {
-        "tran": 1.0,
-        "rot": 30,
-    }  # threshold for translation and rotation error to say prediction is correct.
-
-    pred_tran = np.vstack(predictions["camera"]["preds"]["tran"])#([p["camera"]["preds"]["tran"] for p in predictions])
-    pred_rot = np.vstack(predictions["camera"]["preds"]["rot"])#([p["camera"]["preds"]["rot"] for p in predictions])
-
-    gt_tran = np.vstack(predictions["camera"]["gts"]["tran"]) #([p["camera"]["gts"]["tran"] for p in predictions])
-    gt_rot = np.vstack(predictions["camera"]["gts"]["rot"]) #([p["camera"]["gts"]["rot"] for p in predictions])
-
-    top1_error = {
-        "tran": np.linalg.norm(gt_tran - pred_tran, axis=1),
-        "rot": 2 * np.arccos(np.clip(np.abs(np.sum(np.multiply(pred_rot, gt_rot), axis=1)), -1.0, 1.0)) * 180 / np.pi,
-    }
-    top1_accuracy = {
-        "tran": (top1_error["tran"] < acc_threshold["tran"]).sum()
-        / len(top1_error["tran"]),
-        "rot": (top1_error["rot"] < acc_threshold["rot"]).sum()
-        / len(top1_error["rot"]),
-    }
-    camera_metrics = {
-        f"top1 T err < {acc_threshold['tran']}": top1_accuracy["tran"] * 100,
-        f"top1 R err < {acc_threshold['rot']}": top1_accuracy["rot"] * 100,
-        f"T mean err": np.mean(top1_error["tran"]),
-        f"R mean err": np.mean(top1_error["rot"]),
-        f"T median err": np.median(top1_error["tran"]),
-        f"R median err": np.median(top1_error["rot"]),
-    }
-    
-    gt_mags = {"tran": np.linalg.norm(gt_tran, axis=1), "rot": 2 * np.arccos(gt_rot[:,0]) * 180 / np.pi}
-
-    tran_graph = np.stack([gt_mags['tran'], top1_error['tran']],axis=1)
-    tran_graph_name = os.path.join('output', args.exp, output_folder, args.weights[:-4], 'tran_graph.csv')
-    np.savetxt(tran_graph_name, tran_graph, delimiter=',', fmt='%1.5f')
-
-    rot_graph = np.stack([gt_mags['rot'], top1_error['rot']],axis=1)
-    rot_graph_name = os.path.join('output', args.exp, output_folder, args.weights[:-4], 'rot_graph.csv')
-    np.savetxt(rot_graph_name, rot_graph, delimiter=',', fmt='%1.5f')
-    
-    return camera_metrics
-    '''
-
 def compute_gt_rmat(rotation_x1, rotation_y1, rotation_x2, rotation_y2, batch_size):
     gt_mtx1 = compute_rotation_matrix_from_viewpoint(rotation_x1, rotation_y1, batch_size).view(batch_size, 3, 3)
     gt_mtx2 = compute_rotation_matrix_from_viewpoint(rotation_x2, rotation_y2, batch_size).view(batch_size, 3, 3)
@@ -235,7 +190,6 @@ if __name__ == '__main__':
     parser.add_argument("--image_size", default=[384,512])
     parser.add_argument("--stereo", action="store_true")
     parser.add_argument("--disable_vis", action="store_true")
-    parser.add_argument("--plot_curve", action="store_true")
     parser.add_argument("--id", type=int, default=-1)
     parser.add_argument("--exp", default="droidslam")
     parser.add_argument("--checkpoint_dir")
@@ -277,7 +231,6 @@ if __name__ == '__main__':
     parser.add_argument('--streetlearn_interiornet_type', default='', choices=('',"nooverlap","T",'nooverlapT'))
 
     parser.add_argument('--cnn_decoder_use_essential', action='store_true')
-    parser.add_argument('--use_fixed_intrinsics', action='store_true')
     parser.add_argument('--no_pos_encoding', action='store_true')
     parser.add_argument('--noess', action='store_true')
 
@@ -307,12 +260,12 @@ if __name__ == '__main__':
             dset = test_split
     else:
         if args.streetlearn_interiornet_type == 'T':
-            from data_readers.streetlearn import test_split_T, cur_path#, train_split_for_eval
+            from data_readers.streetlearn import test_split_T, cur_path
             output_folder = 'streetlearnT_test'
             dset = test_split_T
             args.dataset = 'streetlearn_2016'
         else:
-            from data_readers.streetlearn import test_split, cur_path#, train_split_for_eval
+            from data_readers.streetlearn import test_split, cur_path
             output_folder = 'streetlearn_test'
             dset = test_split
 
@@ -355,7 +308,7 @@ if __name__ == '__main__':
     sorted(dset.keys())
 
     for i, dset_i in tqdm(sorted(dset.items())):
-        if args.dataset == 'interiornet': #if args.viz:
+        if args.dataset == 'interiornet':
             if i > 999:
                 continue
         base_pose = np.array([0,0,0,0,0,0,1])
@@ -379,15 +332,7 @@ if __name__ == '__main__':
         rotation = r.as_quat()[0]
         
         rel_pose = np.concatenate([np.array([0,0,0]), rotation]) # translation is 0
-        '''
-        try:
-            
-        except:
-            import pdb; pdb.set_trace()
-            print('no img index',i)
-        continue
-        '''
-        #import pdb; pdb.set_trace()
+
         images = np.stack(images).astype(np.float32)
         images = torch.from_numpy(images).float()
         images = images.permute(0, 3, 1, 2)
@@ -408,7 +353,7 @@ if __name__ == '__main__':
         for ll in range(N):
             graph[ll] = [j for j in range(N) if ll!=j and abs(ll-j) <= 2]
             
-        intrinsics0 = intrinsics# / 8.0
+        intrinsics0 = intrinsics
         
         with torch.no_grad():
             poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics0)
@@ -441,4 +386,3 @@ if __name__ == '__main__':
         print('mean geo rot', np.mean(np.array(metrics['_geo_loss_rot'])), file=f)
         for k in camera_metrics:
             print(k, camera_metrics[k], file=f)
-        #print(camera_metrics, file=f)

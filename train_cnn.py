@@ -47,7 +47,7 @@ from os.path import isfile, join
 
 def setup_ddp(gpu, args):
     dist.init_process_group(                                   
-    	backend='nccl',      # backend='gloo',#                                    
+    	backend='nccl',                                 
    		init_method='env://',     
     	world_size=args.world_size,                              
     	rank=gpu)
@@ -93,7 +93,7 @@ def train(gpu, args):
         param.requires_grad = False
 
     if not args.no_ddp:
-        model = DDP(model, device_ids=[gpu], find_unused_parameters=False)#True)
+        model = DDP(model, device_ids=[gpu], find_unused_parameters=False)
 
     if args.weight_decay > 1e-5:
         decay = []
@@ -106,7 +106,6 @@ def train(gpu, args):
                 no_decay.append(param)
         optimizer = torch.optim.Adam([{'params': no_decay, 'weight_decay': 0}, {'params': decay}], lr=args.lr, weight_decay=args.weight_decay)        
     else:
-        # fetch optimizer
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
     if args.warmup > 0:
@@ -127,15 +126,14 @@ def train(gpu, args):
 
         model.load_state_dict(existing_ckpt['model'], strict=False)
         optimizer.load_state_dict(existing_ckpt['optimizer'])
-        #if 'scheduler' in existing_ckpt:
-        #    scheduler.load_state_dict(existing_ckpt['scheduler'])
+
         del existing_ckpt
     elif args.existing_ckpt is not None:
         if args.no_ddp:
             existing_ckpt = torch.load(args.existing_ckpt)
             state_dict = OrderedDict([
                 (k.replace("module.", ""), v) for (k, v) in existing_ckpt['model'].items()])
-            model.load_state_dict(state_dict)#existing_ckpt)
+            model.load_state_dict(state_dict)
             del state_dict
             optimizer.load_state_dict(existing_ckpt['optimizer'])
             if 'scheduler' in existing_ckpt:
@@ -176,14 +174,14 @@ def train(gpu, args):
         
         db = dataset_factory([args.dataset], datapath=args.datapath, \
                 subepoch=subepoch,  \
-                is_training=is_training, gpu=gpu, use_fixed_intrinsics=args.use_fixed_intrinsics, 
+                is_training=is_training, gpu=gpu, 
                 streetlearn_interiornet_type=args.streetlearn_interiornet_type, use_mini_dataset=args.use_mini_dataset)
         if not args.no_ddp:
             train_sampler = torch.utils.data.distributed.DistributedSampler(
                 db, shuffle=is_training, num_replicas=args.world_size, rank=gpu)
-            train_loader = DataLoader(db, batch_size=args.batch, sampler=train_sampler, num_workers=args.num_workers, pin_memory=True) #  generator=g
+            train_loader = DataLoader(db, batch_size=args.batch, sampler=train_sampler, num_workers=args.num_workers, pin_memory=True)
         else:
-            train_loader = DataLoader(db, batch_size=args.batch, num_workers=1,shuffle=False)#1)
+            train_loader = DataLoader(db, batch_size=args.batch, num_workers=1,shuffle=False)
         
         model.train()
 
@@ -217,7 +215,6 @@ def train(gpu, args):
 
                 Ps_out = SE3(Ps.data.clone())               
 
-                # only 2 images so frame graph has no randomness
                 graph = OrderedDict()
                 for i in range(N):
                     graph[i] = [j for j in range(N) if i!=j and abs(i-j) <= 2]
@@ -229,7 +226,7 @@ def train(gpu, args):
                     if not is_training:
                         r = 1
                     
-                    intrinsics0 = intrinsics# / 8.0
+                    intrinsics0 = intrinsics
                     
                     metrics = {}
 
@@ -258,7 +255,7 @@ def train(gpu, args):
                         loss = args.w_tr * geo_loss_tr + args.w_rot * geo_loss_rot
 
                         loss.backward()
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip) # if total_norm.isnan() or total_norm.isinf():
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
                         optimizer.step()
                         Gs = poses_est[-1].detach()
                         
@@ -302,8 +299,6 @@ def train(gpu, args):
                         torch.save(checkpoint, PATH)
                         should_keep_training = False
                         break
-
-                #dist.barrier()
        
         subepoch = (subepoch + 1)
         if subepoch == 11:
@@ -330,7 +325,7 @@ if __name__ == '__main__':
     parser.add_argument('--cross_indices', nargs='+', type=int, help='indices for cross-attention, if using cross_image transformer connectivity')
     parser.add_argument('--positional_encoding', nargs='+', type=int, help='indices for positional_encoding if using cross_image transformer connectivity')
     parser.add_argument('--outer_prod', nargs='+', type=int, help='indices for fundamental calc if using cross_image transformer connectivity')    
-    parser.add_argument('--pool_size', type=int, default=12)
+    parser.add_argument('--pool_size', type=int, default=60)
     parser.add_argument('--transformer_depth', type=int, default=6)
     parser.add_argument('--gamma', type=float, default=0.9)
     parser.add_argument('--use_essential_units', action='store_true')
@@ -342,7 +337,6 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', type=float, default=1e-5)
     parser.add_argument('--get_dataset', action='store_true')
     parser.add_argument('--seperate_tf_qkv', action='store_true')
-    parser.add_argument('--use_fixed_intrinsics', action='store_true')
     parser.add_argument('--dset_size_tenths', type=int, default=10)
     parser.add_argument('--streetlearn_interiornet_type', default='', choices=('',"nooverlap","T",'nooverlapT'))
 
@@ -351,17 +345,16 @@ if __name__ == '__main__':
     parser.add_argument('--noess', action='store_true')
 
     parser.add_argument('--batch', type=int, default=1)
-    parser.add_argument('--iters', type=int, default=15)
-    parser.add_argument('--steps', type=int, default=200001)
-    parser.add_argument('--lr', type=float, default=0.00025)
+    parser.add_argument('--steps', type=int, default=120000)
+    parser.add_argument('--lr', type=float, default=5e-4)
     parser.add_argument('--clip', type=float, default=2.5)
     parser.add_argument('--use_fixed_geodesic', action="store_true", default=False)
     parser.add_argument('--l1_pos_encoding', action='store_true')
     parser.add_argument('--use_mini_dataset', action='store_true')
 
-    parser.add_argument('--w_tr', type=float, default=0.0)
-    parser.add_argument('--w_rot', type=float, default=0.0)
-    parser.add_argument('--warmup', type=int, default=0)
+    parser.add_argument('--w_tr', type=float, default=10.0)
+    parser.add_argument('--w_rot', type=float, default=10.0)
+    parser.add_argument('--warmup', type=int, default=10000)
 
     parser.add_argument('--restart_prob', type=float, default=0.8)
 
@@ -372,7 +365,7 @@ if __name__ == '__main__':
     import os
     PATHS = ['output/%s/checkpoints' % (args.name), 'output/%s/runs' % (args.name), 'output/%s/train_output/images' % (args.name)]
     args.existing_ckpt = None
-    #if not os.path.isdir(PATH):
+
     for PATH in PATHS:
         try:
             os.makedirs(PATH)

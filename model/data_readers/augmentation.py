@@ -37,13 +37,7 @@ class RGBDAugmentor:
         Summary: performs crop & scale which affects resolution
         and center location, modifying intrinsics. pose not affected.
         depth / image not affected other than resolution & center crop.
-        
-        Q: does intrinsics changing matter?
-        A: yes. Say focal length increases, in this setup resolution increases.
-        Then we crop back to output resolution. We've lost some of our input "zoomed in".
-        Thus, stuff will appear to be closer, so predicted depth will be smaller.
         """
-        #print('b4', poses, intrinsics, images.mean(), disps.mean())
 
         scale = 2 ** np.random.uniform(min_scale, max_scale)
         intrinsics = scale * intrinsics # make focal length slightly larger (or smaller), meaning lens is narrower and zoomed in (or wider and zoomed out)
@@ -54,9 +48,7 @@ class RGBDAugmentor:
         
         disps = F.interpolate(disps, scale_factor=scale, recompute_scale_factor=True) 
 
-        #print('after', intrinsics, images.shape, images.mean(), disps.shape, disps.mean(), scale)
-
-        # always perform center crop (TODO: try non-center crops)
+        # always perform center crop
         y0 = (images.shape[2] - self.crop_size[0]) // 2
         x0 = (images.shape[3] - self.crop_size[1]) // 2
 
@@ -67,8 +59,6 @@ class RGBDAugmentor:
         disps = disps.squeeze(dim=1)
 
         # out size is 384, 512. x0 = amount have to crop / 2 from input 480, 640 +- resolution
-        #print('crop', intrinsics, images.shape, images.shape, disps.shape, self.crop_size[0], x0, y0)
-        #print('end', poses, intrinsics, images.mean(), disps.mean())
         return images, poses, intrinsics, disps
 
     def color_transform(self, images):
@@ -93,6 +83,5 @@ class RGBDAugmentor:
             intrinsics[:,xidx] = scalex * intrinsics[:,xidx]
             intrinsics[:,yidx] = scaley * intrinsics[:,yidx]
             
-        #disps = F.interpolate(disps.unsqueeze(dim=1), size=self.crop_size).squeeze(dim=1)
         images = F.interpolate(images, size=self.crop_size)
         return images, poses, intrinsics, disps

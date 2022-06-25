@@ -34,10 +34,6 @@ class ViTEss(nn.Module):
         if 'attn_one_way' in args and args.attn_one_way:
             self.attn_one_way = True
 
-        self.use_fixed_intrinsics = False
-        if 'use_fixed_intrinsics' in args and args.use_fixed_intrinsics:
-            self.use_fixed_intrinsics = True
-
         self.no_pos_encoding = None
         if 'no_pos_encoding' in args and args.no_pos_encoding != '':
             self.no_pos_encoding = args.no_pos_encoding
@@ -100,8 +96,8 @@ class ViTEss(nn.Module):
                                 get_attn_scores=(self.get_attn_scores or self.cnn_decoder_use_essential), 
                                 not_get_outer_prods=(not args.cnn_decoder_use_essential),
                                 attn_one_way=args.attn_one_way, cnn_attn_plus_feats=args.cnn_attn_plus_feats, use_single_softmax=args.use_single_softmax,
-                                seperate_tf_qkv=args.seperate_tf_qkv, use_fixed_intrinsics=self.use_fixed_intrinsics, no_pos_encoding=args.no_pos_encoding,
-                                noess=args.noess, l1_pos_encoding=args.l1_pos_encoding)#, pretrained_strict=False)
+                                seperate_tf_qkv=args.seperate_tf_qkv, no_pos_encoding=args.no_pos_encoding,
+                                noess=args.noess, l1_pos_encoding=args.l1_pos_encoding)
             self.fusion_transformer = _create_vision_transformer('vit_tiny_patch16_384', **model_kwargs)
 
             self.transformer_depth = args.transformer_depth
@@ -119,7 +115,7 @@ class ViTEss(nn.Module):
             kernel_size = max(1, nearest-args.feature_resolution+1)
 
             outdim = int(self.total_num_features / 2)
-            self.extractor_final_conv = ResidualBlock(mapping[nearest], outdim, 'batch', kernel_size=kernel_size) #nn.Conv2d(nearest, self.total_num_features / 2, 3)
+            self.extractor_final_conv = ResidualBlock(mapping[nearest], outdim, 'batch', kernel_size=kernel_size)
         else:
             nearest = 1
             if args.feature_resolution > nearest:
@@ -143,7 +139,7 @@ class ViTEss(nn.Module):
                     nn.Conv2d(self.pool_feat1, self.pool_feat2, kernel_size=1, bias=True),
                     nn.BatchNorm2d(self.pool_feat2),
                 )
-            #self.fusion_transformer.pos_embed = None
+
             if args.fusion_transformer:
                 self.fusion_transformer.cls_token = None
                 self.num_tokens = 0
@@ -156,16 +152,10 @@ class ViTEss(nn.Module):
                 nn.init.xavier_uniform_(self.fusion_transformer.pos_embed) # TODO: change!
             elif num_patches == 14*14:
                 self.fusion_transformer.pos_embed.data = self.fusion_transformer.pos_embed.data[:,:num_patches + self.num_tokens] 
-            #elif num_patches < 
-            #nn.Parameter(torch.need to initialize(1, num_patches + self.num_tokens, self.embed_dim)) ***FIXED THIS!
-            #import pdb; pdb.set_trace()
-            #self.fusion_transformer.pos_embed = nn.Parameter(torch.zeros([1,num_patches,self.embed_dim])) 
-            #nn.init.xavier_uniform_(self.fusion_transformer.pos_embed)
-            #self.fusion_transformer.pos_embed.data = self.fusion_transformer.pos_embed.data[:,:num_patches + self.num_tokens] 
 
         self.H2 = args.fc_hidden_size
 
-        self.H = self.total_num_features * 2 # + self.num_images * self.pose_size
+        self.H = self.total_num_features * 2
         if len(self.outer_prod) > 0:
             pos_enc = 6
             if self.no_pos_encoding or self.noess:
@@ -192,25 +182,24 @@ class ViTEss(nn.Module):
                 nn.BatchNorm2d(self.pool_feat2)
             )
             self.pose_regressor = nn.Sequential(
-                nn.Linear(self.H, self.H2), # self.H2
-                activation, #nn.ReLU(), #nn.Dropout(.5), # 
-                nn.Linear(self.H2, self.H2), # self.H2
-                activation, #nn.ReLU(), # nn.Dropout(.5), # 
+                nn.Linear(self.H, self.H2),
+                activation,
+                nn.Linear(self.H2, self.H2),
+                activation, 
                 nn.Linear(self.H2, num_out_images * self.pose_size),
                 nn.Unflatten(1, (num_out_images, self.pose_size))
             )
         else:
             self.pose_regressor = nn.Sequential(
-                nn.Linear(self.H, self.H2), # self.H2
-                activation, #nn.ReLU(), #nn.Dropout(.5), # 
-                nn.Linear(self.H2, self.H2), # self.H2
-                activation, #nn.ReLU(), # nn.Dropout(.5), # 
+                nn.Linear(self.H, self.H2), 
+                activation, 
+                nn.Linear(self.H2, self.H2), 
+                activation, 
                 nn.Linear(self.H2, num_out_images * self.pose_size),
                 nn.Unflatten(1, (num_out_images, self.pose_size))
             )
 
     def update_intrinsics(self, input_shape, intrinsics):
-        #import pdb; pdb.set_trace()
         sizey, sizex = self.feature_resolution
         scalex = sizex / input_shape[-1]
         scaley = sizey / input_shape[-2]
@@ -230,7 +219,7 @@ class ViTEss(nn.Module):
         std = torch.as_tensor([0.229, 0.224, 0.225], device=images.device)
         images = images.sub_(mean[:, None, None]).div_(std[:, None, None])
 
-        if self.use_fixed_intrinsics and intrinsics is not None:
+        if intrinsics is not None:
             intrinsics = self.update_intrinsics(images.shape, intrinsics)
 
         # for resnet, we need 224x224 images
@@ -303,36 +292,8 @@ class ViTEss(nn.Module):
                             if self.cnn_attn_plus_feats and layer == self.transformer_depth - 2:
                                 x_previous = torch.clone(x)
                             x = self.fusion_transformer.blocks[layer](x)
-                        if layer in self.outer_prod and layer < self.transformer_depth-1:
-                            # intermediate layer supervision
-                            # if we are using the fundamental matrix to S&E the next layer, we don't supervise it; pass it along instead
-                            if layer in self.positional_encoding:
-                                (x, fundamental) = x 
-                            if self.fund_resid:
-                                if last_fundamental is not None:
-                                    fundamental = last_fundamental + self.fusion_transformer.norm(fundamental).reshape(B,-1)
-                                else:
-                                    fundamental = self.fusion_transformer.norm(fundamental).reshape(B,-1)
-                                last_fundamental = fundamental
-                            else:
-                                fundamental = self.fusion_transformer.norm(fundamental).reshape(B,-1)
 
-                            if not inference:
-                                if self.transformer_depth-1 in self.positional_encoding:
-                                    x_ = self.fusion_transformer.norm(x)
-                        
-                                    x_ = x_.contiguous().reshape([-1, 2, self.feature_resolution[0], self.feature_resolution[1], self.total_num_features//2])
-                                    x_ = x_.permute([0,2,3,1,4])
-                                    x_ = x_.contiguous().reshape([-1, self.feature_resolution[0], self.feature_resolution[1], self.total_num_features])
-                                    x_ = x_.contiguous().permute([0,3,1,2]).contiguous()
-                                    x_ = self.pool_transformer_output(x_).reshape(B,-1)
-
-                                    features = torch.cat([x_, fundamental],dim=-1)
-                                    pose_preds.append(self.pose_regressor(features))
-                                else:
-                                    pose_preds.append(self.pose_regressor(fundamental))
-
-                    if layer in self.outer_prod and layer not in self.positional_encoding:# len(self.outer_prod) > 0 and len(self.positional_encoding) == 0:
+                    if layer in self.outer_prod and layer not in self.positional_encoding:
                         if (self.get_attn_scores and not(not self.cnn_decoder_use_essential)) or (self.cnn_decoder_use_essential):
                             (x, attention_scores) = x
                         if not(not self.cnn_decoder_use_essential):
@@ -386,7 +347,7 @@ class ViTEss(nn.Module):
             pooled_features = self.pool_attn(features)
             pose_preds.append(self.pose_regressor(pooled_features.reshape([B, -1])))
         else:
-            pose_preds.append(self.pose_regressor(features.reshape([B, -1]))) # FC might have trouble learning all mappings equally??
+            pose_preds.append(self.pose_regressor(features.reshape([B, -1])))
 
         for ppi in range(len(pose_preds)):
             this_out_Gs_mtx = None

@@ -41,7 +41,6 @@ class Matterport(RGBDDataset):
 
     @staticmethod 
     def is_test_scene(scene):
-        # print(scene, any(x in scene for x in test_split))
         return any(x in scene for x in test_split)
 
     def class2xyz(self, cls):
@@ -97,18 +96,6 @@ class Matterport(RGBDDataset):
             scene_info['class_rot'] += [self.quat2class(og_rel_pose[3], og_rel_pose[4], og_rel_pose[5], og_rel_pose[6])]    
             scene_info['class_tr'] += [self.xyz2class(og_rel_pose[0], og_rel_pose[1], og_rel_pose[2])]
 
-            '''
-            # debug
-            print('rot og',og_rel_pose[3], og_rel_pose[4], og_rel_pose[5], og_rel_pose[6])
-            x = self.quat2class(og_rel_pose[3], og_rel_pose[4], og_rel_pose[5], og_rel_pose[6])
-            print('rot class',x)
-            print('rot back',self.class2quat(x))
-
-            print('tr og',og_rel_pose[0], og_rel_pose[1], og_rel_pose[2])
-            x = self.xyz2class(og_rel_pose[0], og_rel_pose[1], og_rel_pose[2])
-            print('tr class',x)
-            print('tr back',self.class2xyz(x))
-            '''
         return scene_info
 
     @staticmethod

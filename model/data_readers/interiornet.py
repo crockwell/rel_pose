@@ -32,7 +32,6 @@ class InteriorNet(RGBDDataset):
 
     @staticmethod 
     def is_test_scene(scene):
-        # print(scene, any(x in scene for x in test_split))
         return any(x in scene for x in test_split)
 
     def compute_rotation_matrix_from_two_matrices(self, m1, m2):
@@ -43,7 +42,6 @@ class InteriorNet(RGBDDataset):
     def compute_rotation_matrix_from_viewpoint(self, rotation_x, rotation_y, batch):
         rotax = rotation_x.view(batch, 1).type(torch.FloatTensor)
         rotay = - rotation_y.view(batch, 1).type(torch.FloatTensor)
-        # rotaz = torch.zeros(batch, 1)
 
         c1 = torch.cos(rotax).view(batch, 1)  # batch*1
         s1 = torch.sin(rotax).view(batch, 1)  # batch*1
@@ -98,7 +96,6 @@ class InteriorNet(RGBDDataset):
         scene_info = {'images': [], 'poses': [], 'intrinsics': [], 'angles': []}
         base_pose = np.array([0,0,0,0,0,0,1])
         
-        #if 'nooverlap' in self.name:
         if valid:
             if self.streetlearn_interiornet_type == '' or \
                self.streetlearn_interiornet_type == 'nooverlap':
