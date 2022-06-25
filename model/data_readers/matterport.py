@@ -19,11 +19,6 @@ with open(osp.join(cur_path, 'mp3d_planercnn_json/cached_set_val.json')) as f:
 with open(osp.join(cur_path, 'mp3d_planercnn_json/cached_set_test.json')) as f:
     test_split = json.load(f)
 
-'''
-train_split_for_eval = osp.join(cur_path, 'tartan_train_split_for_eval.txt')
-train_split_for_eval = open(train_split_for_eval).read().split()
-'''
-
 class Matterport(RGBDDataset):
 
     # scale depths to balance rot & trans

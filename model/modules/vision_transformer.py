@@ -469,7 +469,7 @@ class CrossBlock(nn.Module):
         self.attn_one_way = attn_one_way
         self.noess = noess
 
-    def forward(self, x, no_residual=False, camera=None, intrinsics=None):
+    def forward(self, x, camera=None, intrinsics=None):
         b_s, h_w, nf = x.shape
         x = x.reshape([-1, 2, h_w, nf])
         x1_in = x[:,0]
@@ -641,37 +641,33 @@ class Block(nn.Module):
                 )
             
 
-    def forward(self, x, no_residual=False, camera=None, intrinsics=None):
-        if no_residual:
-            x = self.drop_path(self.attn(self.norm1(x), camera, intrinsics=intrinsics))
-            print('no res!')
+    def forward(self, x, camera=None, intrinsics=None):
+        if self.outer_prod:
+            fundamental = self.attn(self.norm1(x), camera, intrinsics=intrinsics)
+            fundamental = fundamental + self.drop_path(self.mlp(self.norm2(fundamental)))
+            return fundamental
         else:
-            if self.outer_prod:
-                fundamental = self.attn(self.norm1(x), camera, intrinsics=intrinsics)
-                fundamental = fundamental + self.drop_path(self.mlp(self.norm2(fundamental)))
-                return fundamental
-            else:
-                if self.squeeze_excite:
-                    '''
-                    we follow standard implementation: 
-                    multiply input by excite (sigmoid so between 0-1) and have residual go around entire branch.
-                    '''
-                    (x, fundamental_in) = x
-                    identity = x
-                    if self.squeeze_excite_big:
-                        excite = self.excitation(fundamental_in).unsqueeze(1)
-                    else:
-                        # x is B,N,D
-                        # fundamental is B,D,D
-                        squeeze = self.squeeze(fundamental_in) 
-                        # first we "squeeze" fundamental to single D
-                        excite = self.excitation(squeeze).unsqueeze(1)
-                        # excite is B,D - we modify how important is each D in x
-                    out = excite * x
+            if self.squeeze_excite:
+                '''
+                we follow standard implementation: 
+                multiply input by excite (sigmoid so between 0-1) and have residual go around entire branch.
+                '''
+                (x, fundamental_in) = x
+                identity = x
+                if self.squeeze_excite_big:
+                    excite = self.excitation(fundamental_in).unsqueeze(1)
                 else:
-                    identity = x 
-                    out = x
-                x = identity + self.drop_path(self.attn(self.norm1(out), camera, intrinsics=intrinsics))
+                    # x is B,N,D
+                    # fundamental is B,D,D
+                    squeeze = self.squeeze(fundamental_in) 
+                    # first we "squeeze" fundamental to single D
+                    excite = self.excitation(squeeze).unsqueeze(1)
+                    # excite is B,D - we modify how important is each D in x
+                out = excite * x
+            else:
+                identity = x 
+                out = x
+            x = identity + self.drop_path(self.attn(self.norm1(out), camera, intrinsics=intrinsics))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
 

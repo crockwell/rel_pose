@@ -16,7 +16,7 @@ class ViTEss(nn.Module):
     def __init__(self, args):
         super(ViTEss, self).__init__()
 
-        self.num_images = args.n_frames
+        self.num_images = 2
         self.pose_size = 7
 
         if args.prediction_pose_type == 'classify':
@@ -28,10 +28,6 @@ class ViTEss(nn.Module):
         self.get_attn_scores = False
         if ('use_sigmoid_attn' in args and args.use_sigmoid_attn) or ('supervise_epi' in args and args.supervise_epi):
             self.get_attn_scores = True
-
-        self.multiframe_predict_last_frame_only = False
-        if args.multiframe_predict_last_frame_only:
-            self.multiframe_predict_last_frame_only = True
 
         self.weird_feats = False
         if 'weird_feats' in args and args.weird_feats:
@@ -130,30 +126,7 @@ class ViTEss(nn.Module):
 
             if self.optical_flow_input in ['input', 'both']:
                 # change first layer of resnet
-                self.resnet.conv1 = nn.Conv2d(5, 64, kernel_size=7, stride=2, bias=False)
-    
-        self.post_conv = None
-        self.post_conv_3D = None
-        if args.post_conv:
-            self.resnet.avgpool = nn.Identity()
-            self.unflatten_resnet = nn.Unflatten(-1,(self.feat_size,self.num_images,7))
-            self.post_conv = nn.Sequential(
-                nn.Conv2d(self.total_total_num_features, self.total_num_features, kernel_size=1, stride=1),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(self.total_num_features, self.total_num_features, kernel_size=1, stride=1),
-                nn.AdaptiveAvgPool2d((1, 1))
-            )
-        elif args.post_conv_3D:
-            self.resnet.avgpool = nn.Identity()
-            self.unflatten_resnet = nn.Unflatten(-1,(self.feat_size,self.num_images,7))
-            self.post_conv_3D = nn.Sequential(
-                nn.Conv3d(self.feat_size, self.feat_size, kernel_size=1, stride=1),
-                nn.ReLU(inplace=True),
-                nn.Conv3d(self.feat_size, self.feat_size, kernel_size=1, stride=1),
-                nn.Flatten(1,2),
-                nn.AdaptiveAvgPool2d((1, 1)),
-                nn.Flatten(1, 2),
-            )      
+                self.resnet.conv1 = nn.Conv2d(5, 64, kernel_size=7, stride=2, bias=False) 
             
         if args.outer_prod is None:
             args.outer_prod = []
@@ -263,10 +236,7 @@ class ViTEss(nn.Module):
                 self.total_num_features = 384 # to be consistent with pretrained ViT
                 self.embed_dim = 384 # we could choose I think? but just be consistent
             elif num_patches > 224 and num_patches < 785:                    
-                if args.use_hybrid_vit:
-                    self.fusion_transformer = timm.create_model('vit_tiny_r_s16_p8_384', pretrained=pt) # depth 12, 3 heads. 24 patch
-                else:
-                    self.fusion_transformer = timm.create_model('vit_tiny_patch16_384', pretrained=pt) # depth 12, 3 heads. 24 patch
+                self.fusion_transformer = timm.create_model('vit_tiny_patch16_384', pretrained=pt) # depth 12, 3 heads. 24 patch
                 self.total_num_features = 192 # to be consistent with pretrained ViT
                 self.embed_dim = 192
                 self.num_heads = 3
@@ -281,9 +251,6 @@ class ViTEss(nn.Module):
                 self.total_num_features = 192 # to be consistent with pretrained ViT
                 self.embed_dim = 192
 
-            self.no_residual = False
-            if 'no_transformer_decoder_residual' in args and args.no_transformer_decoder_residual:
-                self.no_residual = True
             self.transformer_depth = args.transformer_depth
             self.fusion_transformer.blocks = self.fusion_transformer.blocks[:args.transformer_depth]
             self.fusion_transformer.patch_embed = nn.Identity()
@@ -333,7 +300,6 @@ class ViTEss(nn.Module):
             self.num_patches = self.feature_resolution[0] * self.feature_resolution[1]
             self.transformer_connectivity = ''
 
-        self.use_full_transformer_output = args.use_full_transformer_output
         self.pool_transformer_output = None
         if args.pool_transformer_output:
             if self.use_cnn_decoder:
@@ -368,14 +334,6 @@ class ViTEss(nn.Module):
         
         if args.fusion_transformer:
             self.pos_encoding = None
-            if args.pos_encoding_size > 0:
-                X = np.arange(self.feature_resolution[0]) / (self.feature_resolution[0]-1) * 2 - 1
-                Y = np.arange(self.feature_resolution[1]) / (self.feature_resolution[1]-1) * 2 - 1
-                yy, xx = np.meshgrid(Y,X)
-                self.pos_encoding = torch.stack([torch.from_numpy(xx.flatten()), torch.from_numpy(yy.flatten())], dim=1)
-
-                if args.pos_encoding_size > 2:
-                    self.pos_encoding = torch.from_numpy(generate_fourier_features(self.pos_encoding.numpy(), num_bands=(args.pos_encoding_size-2)//4))
 
             if num_patches >= 24*24:
                 self.fusion_transformer.pos_embed = nn.Parameter(torch.zeros([1,num_patches + self.num_tokens,self.embed_dim])) 
@@ -392,14 +350,7 @@ class ViTEss(nn.Module):
         self.H2 = args.fc_hidden_size
 
         self.H = self.total_num_features * 2 # + self.num_images * self.pose_size
-        if args.use_full_transformer_output:
-            if args.transformer_connectivity == 'in_image':
-                self.H = self.total_num_features * (args.feature_resolution * args.feature_resolution + 1) * self.num_images
-            elif args.transformer_connectivity == 'all':
-                self.H = self.total_num_features * (args.feature_resolution * args.feature_resolution * self.num_images + 1)
-            else:
-                self.H = self.total_num_features * (self.num_patches + 1)# + self.num_images * self.pose_size
-        elif len(self.outer_prod) > 0:
+        if len(self.outer_prod) > 0:
             pos_enc = 6
             if self.no_pos_encoding or self.noess:
                 pos_enc = 0
@@ -414,11 +365,8 @@ class ViTEss(nn.Module):
                 self.H *= 2
         
         num_out_images = self.num_images
-        if self.multiframe_predict_last_frame_only:
-            num_out_images = 2
-        activation = nn.Dropout(.5)
-        if args.fc_activation == 'relu':
-            activation = nn.ReLU()
+
+        activation = nn.ReLU()
 
         self.use_vo_mlp = False
         if args.use_vo_mlp:
@@ -584,30 +532,21 @@ class ViTEss(nn.Module):
             
             x = self.extractor_final_conv(x)
 
-            if self.post_conv is not None:
-                unpooled_features = self.unflatten_resnet(features) # undo global avg pooling
-                stacked_features = unpooled_features.reshape((-1,self.total_num_features,self.num_images,7)) # append all 7 images to filter space
-                features = self.post_conv(stacked_features).reshape(-1,self.num_images,self.feat_size)
-            elif self.post_conv_3D is not None:
-                unpooled_features = self.unflatten_resnet(features) # undo global avg pooling
-                stacked_features = torch.transpose(unpooled_features.unsqueeze(0), 1, 2)
-                features = self.post_conv_3D(stacked_features).reshape(-1,self.num_images,self.feat_size)
+            x = x.reshape([input_images.shape[0], -1, self.num_patches])
+            if self.transformer_connectivity == 'in_image_stacked':
+                # want to use more resnet features, so that can stack half of them from each input image -- add some features from both!
+                x = x.reshape([images.shape[0], self.num_images, -1, self.num_patches])
+                features = torch.cat([x[:,0,:self.total_num_features//2], x[:,1,:self.total_num_features//2]], dim=1)
+            elif self.transformer_connectivity == 'difference':
+                x = x.reshape([images.shape[0], self.num_images, -1, self.num_patches])
+                features_tgt = x[:,1]
+                features_ref = x[:,0]
+                features = features_tgt - features_ref
+            elif self.transformer_connectivity == 'cross_image' or self.fusion_transformer is None:
+                features = x[:,:self.total_num_features//2]
             else:
-                x = x.reshape([input_images.shape[0], -1, self.num_patches])
-                if self.transformer_connectivity == 'in_image_stacked':
-                    # want to use more resnet features, so that can stack half of them from each input image -- add some features from both!
-                    x = x.reshape([images.shape[0], self.num_images, -1, self.num_patches])
-                    features = torch.cat([x[:,0,:self.total_num_features//2], x[:,1,:self.total_num_features//2]], dim=1)
-                elif self.transformer_connectivity == 'difference':
-                    x = x.reshape([images.shape[0], self.num_images, -1, self.num_patches])
-                    features_tgt = x[:,1]
-                    features_ref = x[:,0]
-                    features = features_tgt - features_ref
-                elif self.transformer_connectivity == 'cross_image' or self.fusion_transformer is None:
-                    features = x[:,:self.total_num_features//2]
-                else:
-                    features = x[:,:self.total_num_features]
-                features = features.permute([0,2,1])
+                features = x[:,:self.total_num_features]
+            features = features.permute([0,2,1])
 
         return features, intrinsics
     
@@ -639,7 +578,7 @@ class ViTEss(nn.Module):
                 features = torch.cat([features, optical_flow_local], dim=2)
                 #features[:,:,-2:] = optical_flow_local #torch.cat([features, optical_flow_local], dim=1)
             x = features[:,:,:self.embed_dim]
-            if self.use_full_transformer_output or self.pool_transformer_output is not None or len(self.outer_prod)>0:
+            if self.pool_transformer_output is not None or len(self.outer_prod)>0:
                 # we re-implement forward pass which returns all patch outputs!
                 x = self.fusion_transformer.patch_embed(x)
 
@@ -659,10 +598,6 @@ class ViTEss(nn.Module):
 
                     last_fundamental = None
                     for layer in range(self.transformer_depth):
-                        # last layers may be positional encodings
-                        if self.pos_encoding is not None:
-                            pos_encoding_size = self.pos_encoding.shape[-1]
-                            x[:,:,-1 * pos_encoding_size:] = self.pos_encoding
                         
                         if self.use_essential_units:
                             x = self.fusion_transformer.blocks[layer](x, intrinsics=intrinsics)
@@ -699,14 +634,6 @@ class ViTEss(nn.Module):
                                 else:
                                     pose_preds.append(self.pose_regressor(fundamental))
 
-                    '''
-                    # don't do residual for last 1/3 of layers?
-                    if self.no_residual:
-                        x = self.fusion_transformer.blocks[:int((2/3)*self.transformer_depth)](x)
-                        x = self.fusion_transformer.blocks[int((2/3)*self.transformer_depth):](x, no_residual=True)
-                    else:
-                        x = self.fusion_transformer.blocks(x)
-                    '''
                     if layer in self.outer_prod and layer not in self.positional_encoding:# len(self.outer_prod) > 0 and len(self.positional_encoding) == 0:
                         if (self.get_attn_scores and not(self.use_cnn_decoder and not self.cnn_decoder_use_essential)) or (self.cnn_decoder_use_essential):
                             (x, attention_scores) = x
@@ -822,13 +749,7 @@ class ViTEss(nn.Module):
                 eps = torch.ones_like(normalized) * .01
                 pred_out_Gs_new = SE3(torch.clone(pred_out_Gs.data))
                 pred_out_Gs_new.data[:,:,3:] = pred_out_Gs.data[:,:,3:] / torch.max(normalized, eps)
-                if self.multiframe_predict_last_frame_only:
-                    these_out_Gs = SE3(torch.cat([Gs[:,:1].data, pred_out_Gs_new.data[:,1:]], dim=1))
-                else:
-                    these_out_Gs = SE3(torch.cat([Gs[:,:1].data, pred_out_Gs_new.data[:,1:]], dim=1))
-                #print(normalized)
-            elif self.prediction_pose_type == 'classify':
-                these_out_Gs = pred_out_Gs.data
+                these_out_Gs = SE3(torch.cat([Gs[:,:1].data, pred_out_Gs_new.data[:,1:]], dim=1))
             else:
                 these_out_Gs = SE3(torch.cat([Gs[:,:1].data, pred_out_Gs.data[:,1:]], dim=1))
                 

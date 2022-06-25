@@ -86,7 +86,7 @@ def eval_camera(predictions):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--datapath", default="datasets/TartanAir")
+    parser.add_argument("--datapath")
     parser.add_argument("--weights", default="droid.pth")
     parser.add_argument("--buffer", type=int, default=1000)
     parser.add_argument("--image_size", default=[384,512])
@@ -97,15 +97,9 @@ if __name__ == '__main__':
     parser.add_argument("--exp", default="droidslam")
     parser.add_argument("--checkpoint_dir")
     parser.add_argument('--fusion_transformer', action="store_true", default=False)
-    parser.add_argument('--post_conv', action="store_true", default=False)
-    parser.add_argument('--post_conv_3D', action="store_true", default=False)
-    parser.add_argument('--use_correlation_volume', action='store_true', default=False)
-    parser.add_argument('--fc_activation', default='dropout')
-    parser.add_argument('--use_full_transformer_output', action="store_true", default=False)
     parser.add_argument('--fc_hidden_size', type=int, default=512)
     parser.add_argument('--num_input_images', type=int, default=7)
     parser.add_argument('--feature_width', type=int, default=7)
-    parser.add_argument('--n_frames', type=int, default=7)
     parser.add_argument('--normalized_coords', action="store_true", default=False)
     parser.add_argument('--normalize_quats', action="store_true", default=False)
     parser.add_argument('--prediction_pose_type', choices=("change", "absolute", 'classify'))
@@ -121,7 +115,6 @@ if __name__ == '__main__':
     parser.add_argument('--positional_encoding', nargs='+', type=int, help='indices for positional_encoding if using cross_image transformer connectivity')
     parser.add_argument('--outer_prod', nargs='+', type=int, help='indices for fundamental calc if using cross_image transformer connectivity')
     parser.add_argument('--pool_transformer_output', action="store_true", default=False)
-    parser.add_argument('--use_amp', action="store_true", default=False)
     parser.add_argument('--weird_feats', action="store_true", default=False)
     parser.add_argument('--pool_size', type=int, default=12)
     parser.add_argument('--use_big_transformer', action="store_true", default=False)
@@ -132,7 +125,6 @@ if __name__ == '__main__':
     parser.add_argument('--no_pretrained_transformer', action='store_true')
     parser.add_argument('--use_procrustes', action='store_true')    
     parser.add_argument('--use_camera_encodings', action="store_true", default=False)
-    parser.add_argument('--multiframe_predict_last_frame_only', action="store_true", default=False)    
     parser.add_argument('--gamma', type=float, default=0.9)    
     parser.add_argument('--squeeze_excite', nargs='+', type=int, help='indices for fundamental calc if using cross_image transformer connectivity')    
     parser.add_argument('--use_essential_units', action='store_true')
@@ -140,7 +132,6 @@ if __name__ == '__main__':
     parser.add_argument('--squeeze_excite_big', action='store_true')
     parser.add_argument('--max_scale_aug', type=float, default=0.25)
     parser.add_argument('--cross_features', action='store_true')
-    parser.add_argument('--epi_dist_scale', type=float, default=1.0)
     parser.add_argument('--epi_dist_sub', type=float, default=1.0)
     parser.add_argument('--first_head_only', action='store_true')
     parser.add_argument('--epipolar_loss_both_dirs', action='store_true')
@@ -153,8 +144,7 @@ if __name__ == '__main__':
     parser.add_argument('--no_pretrained_resnet', action='store_true')
     parser.add_argument('--supervise_epi', action='store_true')  
     parser.add_argument('--use_single_softmax', action='store_true')  
-    parser.add_argument('--use_hybrid_vit', action='store_true')
-    parser.add_argument('--seperate_tf_qkv', action='store_true')
+=    parser.add_argument('--seperate_tf_qkv', action='store_true')
     parser.add_argument('--l1_pos_encoding', action='store_true')
     parser.add_argument('--use_medium_transformer_3head', action='store_true')
 
@@ -168,9 +158,6 @@ if __name__ == '__main__':
     parser.add_argument('--cnn_decoder_use_essential', action='store_true')
     parser.add_argument('--cnn_decode_each_head', action='store_true')    
     parser.add_argument('--use_fixed_intrinsics', action='store_true')
-
-    parser.add_argument('--optical_flow_input', default='', choices=('',"input","before_tf",'after_tf', "both"))
-    parser.add_argument('--optical_flow_type', default='', choices=('',"ground_truth","tartanvo",'droid_slam'))
     parser.add_argument('--clustered_dim', type=int, default=0)
     parser.add_argument('--no_pos_encoding', action='store_true')
     parser.add_argument('--noess', action='store_true')
@@ -299,28 +286,9 @@ if __name__ == '__main__':
         intrinsics0 = intrinsics# / 8.0
         
         with torch.no_grad():
-            with torch.cuda.amp.autocast(enabled=args.use_amp):
-                if args.clustered_dim > 0:
-                    clusters_est = model(images, Gs, intrinsics=intrinsics0)
-                    poses_est = args.cluster_fcn.cluster_centers_(clusters_est) # just use argmax
-
-                elif args.use_sigmoid_attn or args.supervise_epi:
-                    poses_est, poses_est_mtx, attention_scores = model(images, Gs, intrinsics=intrinsics0)
-                    if args.w_epi > 0:
-                        epipolar_loss, epipolar_metrics = losses.epipolar_loss(Gs, attention_scores, train_val=train_val, 
-                                epi_dist_scale=args.epi_dist_scale, epi_dist_sub=args.epi_dist_sub, 
-                                first_head_only=args.first_head_only, epipolar_loss_both_dirs=args.epipolar_loss_both_dirs, JD=args.JD,
-                                loss_on_each_head=args.loss_on_each_head)
-                elif args.prediction_pose_type == 'classify':
-                    poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics0)
-                    geo_metrics, class_loss_tr, class_loss_rot = losses.cross_entropy_loss(class_rot, class_tr, poses_est, train_val='test')
-                    trans_class = torch.argmax(poses_est[0][0,:32]).cpu().item()
-                    rot_class = torch.argmax(poses_est[0][0,32:]).cpu().item()
-                    preds = np.concatenate((kmeans_trans.cluster_centers_[trans_class], kmeans_rots.cluster_centers_[rot_class]))
-                else:
-                    poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics0)
-                    geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = losses.geodesic_loss(Ps, poses_est, \
-                            graph, do_scale=False, train_val=train_val, gamma=args.gamma)
+            poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics0)
+            geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = losses.geodesic_loss(Ps, poses_est, \
+                    graph, do_scale=False, train_val=train_val, gamma=args.gamma)
 
         predictions['camera']['gts']['tran'].append(dset['data'][i]['rel_pose']['position'])
         gt_rotation = dset['data'][i]['rel_pose']['rotation']
