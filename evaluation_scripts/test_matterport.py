@@ -87,11 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('--predict_normalized_pose', action="store_true", default=False)
     parser.add_argument('--eval_on_train_set', action="store_true", default=False)
     parser.add_argument('--eval_on_test_set', action="store_true", default=False)
-    parser.add_argument('--eval_on_test_set_hard', action="store_true", default=False)
-    parser.add_argument('--cross_indices', nargs='+', type=int, help='indices for cross-attention, if using cross_image transformer connectivity')
-    parser.add_argument('--positional_encoding', nargs='+', type=int, help='indices for positional_encoding if using cross_image transformer connectivity')
-    parser.add_argument('--outer_prod', nargs='+', type=int, help='indices for fundamental calc if using cross_image transformer connectivity')
-    parser.add_argument('--pool_transformer_output', action="store_true", default=False)
+    parser.add_argument('--cross_attn', nargs='+', type=int, help='indices for cross-attention, if using cross_image transformer connectivity')
     parser.add_argument('--pool_size', type=int, default=12)
     parser.add_argument('--use_big_transformer', action="store_true", default=False)
     parser.add_argument('--transformer_depth', type=int, default=6)
@@ -99,18 +95,12 @@ if __name__ == '__main__':
     parser.add_argument('--use_procrustes', action='store_true')    
     parser.add_argument('--use_camera_encodings', action="store_true", default=False)
     parser.add_argument('--gamma', type=float, default=0.9)    
-    parser.add_argument('--use_essential_units', action='store_true')
-    parser.add_argument('--fund_resid', action='store_true')
     parser.add_argument('--cross_features', action='store_true')
     parser.add_argument('--epi_dist_sub', type=float, default=1.0)
     parser.add_argument('--pwc_big', action='store_true')
     parser.add_argument('--supervise_epi', action='store_true')  
     parser.add_argument('--use_single_softmax', action='store_true')  
-    parser.add_argument('--seperate_tf_qkv', action='store_true')
     parser.add_argument('--l1_pos_encoding', action='store_true')
-
-    parser.add_argument('--cnn_attn_plus_feats', action='store_true')
-    parser.add_argument('--attn_one_way', action='store_true')
     
     parser.add_argument('--cnn_decoder_use_essential', action='store_true')
     parser.add_argument('--no_pos_encoding', action='store_true')
@@ -131,16 +121,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     torch.multiprocessing.set_start_method('spawn')
 
-    from data_readers.matterport import val_split, test_split, cur_path
+    from data_readers.matterport import test_split, cur_path
 
-    output_folder = 'matterport_val'
-    dset = val_split
-    if args.eval_on_train_set: 
-        output_folder = 'matterport_train'
-        dset = train_split_for_eval
-    elif args.eval_on_test_set_hard:
-        dset = test_split
-        output_folder = 'matterport_test'
+    dset = test_split
+    output_folder = 'matterport_test'
 
     print('performing evaluation on %s set using model %s' % (output_folder, args.checkpoint_dir))
 

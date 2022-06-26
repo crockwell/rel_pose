@@ -159,88 +159,41 @@ def get_positional_encodings(B, N, intrinsics=None):
 
 class CrossAttention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., \
-                proj_drop=0., outer_prod=False, positional_encoding=False,
-                use_essential_units=False, cross_features=False, get_attn_scores=False,
-                not_get_outer_prods=False, attn_one_way=False,
-                use_single_softmax=False, cnn_attn_plus_feats=False, seperate_tf_qkv=False,
+                proj_drop=0., cross_features=False, get_attn_scores=False,
+                not_get_outer_prods=False, 
+                use_single_softmax=False, 
                 no_pos_encoding=False, noess=False, l1_pos_encoding=False):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
         self.scale = head_dim ** -0.5
 
-        self.outer_prod = outer_prod
-        self.positional_encoding = positional_encoding
-
         if not_get_outer_prods:
-            if attn_one_way:
-                if cnn_attn_plus_feats:
-                    self.qkv2 = nn.Linear(dim, dim * 2, bias=qkv_bias)
-                else:
-                    self.qkv2 = nn.Linear(dim, dim, bias=qkv_bias)
-                self.qkv = nn.Linear(dim, dim, bias=qkv_bias)
-            else:
-                self.qkv = nn.Linear(dim, dim * 2, bias=qkv_bias)
+            self.qkv = nn.Linear(dim, dim * 2, bias=qkv_bias)
         else:
             self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-            if seperate_tf_qkv:
-                self.qkv2 = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
-        if (self.outer_prod or self.positional_encoding) and not noess:
-            if self.outer_prod and (not not_get_outer_prods or cnn_attn_plus_feats):          
+        if not noess:
+            if not not_get_outer_prods:          
                 if no_pos_encoding:      
                     self.proj_fundamental = nn.Linear(dim, dim)
-                    if seperate_tf_qkv:
-                        self.proj_fundamental2 = nn.Linear(dim, dim)
                 else:
                     self.proj_fundamental = nn.Linear(dim+int(6*self.num_heads), dim)
-                    if seperate_tf_qkv:
-                        self.proj_fundamental2 = nn.Linear(dim+int(6*self.num_heads), dim)
-            if self.positional_encoding:
-                if self.no_pos_encoding:
-                    self.proj = nn.Linear(dim, dim)
-                else:
-                    self.proj = nn.Linear(dim+int(6*self.num_heads), dim)
         else:
             self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
-        self.use_essential_units = use_essential_units
         self.cross_features = cross_features
         self.get_attn_scores = get_attn_scores
         self.attn_shift = attn_shift
         self.not_get_outer_prods = not_get_outer_prods
-        self.attn_one_way = attn_one_way
         self.use_single_softmax = use_single_softmax
-        self.cnn_attn_plus_feats = cnn_attn_plus_feats
-        self.seperate_tf_qkv = seperate_tf_qkv
         self.no_pos_encoding = no_pos_encoding
         self.noess = noess
         self.l1_pos_encoding = l1_pos_encoding
 
     def forward(self, x1, x2, camera=None, intrinsics=None):
         B, N, C = x1.shape
-
-        if self.attn_one_way: # only getting cross attention scores for one way. passed on to next step.
-            q1 = self.qkv(x1).reshape(B, N, 1, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)[0]
-            if self.cnn_attn_plus_feats:
-                k2, v2 = self.qkv2(x2).reshape(B, N, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-            else:
-                k2 = self.qkv2(x2).reshape(B, N, 1, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)[0]
-            attn_2 = (q1 @ k2.transpose(-2, -1)) * self.scale
-            attn_fundamental_2 = attn_2.softmax(dim=-1)
-            
-            if self.cnn_attn_plus_feats:
-                positional = get_positional_encodings(B, N, intrinsics=intrinsics).cuda() # shape B,N,6
-                v2 = torch.cat([v2,positional.unsqueeze(1).repeat(1,self.num_heads,1,1)],dim=3)
-                attn_2b = self.attn_drop(attn_fundamental_2)
-                x2 = (attn_2b @ v2).transpose(1, 2).reshape(B, N, C+int(6*self.num_heads))
-                x2 = self.proj_fundamental(x2)
-                x2 = self.proj_drop(x2).reshape([B,N,self.num_heads,-1]).permute([0,2,1,3])
-
-                attn_fundamental_2 = torch.cat([attn_fundamental_2, x2], dim=3)
-            
-            return attn_fundamental_2
 
         if self.not_get_outer_prods:
             qkv1 = self.qkv(x1).reshape(B, N, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
@@ -252,13 +205,10 @@ class CrossAttention(nn.Module):
             qkv1 = self.qkv(x1).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
             q1, k1, v1 = qkv1[0], qkv1[1], qkv1[2]   # make torchscript happy (cannot use tensor as tuple)
 
-            if self.seperate_tf_qkv:
-                qkv2 = self.qkv2(x2).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-            else:
-                qkv2 = self.qkv(x2).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+            qkv2 = self.qkv(x2).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
             q2, k2, v2 = qkv2[0], qkv2[1], qkv2[2]   # make torchscript happy (cannot use tensor as tuple)
 
-        if self.outer_prod and not self.noess:
+        if not self.noess:
             attn_1 = (q2 @ k1.transpose(-2, -1)) * self.scale
             attn_2 = (q1 @ k2.transpose(-2, -1)) * self.scale
 
@@ -290,50 +240,10 @@ class CrossAttention(nn.Module):
                 fundamental_2 = fundamental_2.reshape(B, int(C+6*self.num_heads), int((C+6*self.num_heads)/self.num_heads)).transpose(-2,-1)
             # fundamental is C/3+6,C/3+6 (for each head)
 
-            if self.seperate_tf_qkv:
-                fundamental_2 = self.proj_fundamental2(fundamental_2)
-            else:
-                fundamental_2 = self.proj_fundamental(fundamental_2)
+            fundamental_2 = self.proj_fundamental(fundamental_2)
             fundamental_1 = self.proj_fundamental(fundamental_1)
 
-            if self.positional_encoding:
-                if self.no_pos_encoding:
-                    x1 = (attn_1.softmax(dim=-1) @ v1).transpose(1, 2).reshape(B, N, C)
-                    x2 = (attn_2.softmax(dim=-1) @ v2).transpose(1, 2).reshape(B, N, C)
-                else:
-                    x1 = (attn_1.softmax(dim=-1) @ v1).transpose(1, 2).reshape(B, N, C+int(6*self.num_heads))
-                    x2 = (attn_2.softmax(dim=-1) @ v2).transpose(1, 2).reshape(B, N, C+int(6*self.num_heads))
-                
-                x1 = self.proj(x1)
-                x2 = self.proj(x2)
-
-                x1 = self.proj_drop(x1)
-                x2 = self.proj_drop(x2)
-
-                return x2, fundamental_2, x1, fundamental_1
-            
             return fundamental_2, fundamental_1, attn_fundamental_2, attn_fundamental_1
-
-        elif self.positional_encoding:
-            # q2, k1, v1
-            attn_1 = (q2 @ k1.transpose(-2, -1)) * self.scale
-            attn_1 = attn_1.softmax(dim=-1)
-            attn_1 = self.attn_drop(attn_1)
-
-            positional1 = get_positional_encodings(B, N, intrinsics=intrinsics).cuda() # shape B,N,6
-            v1 = torch.cat([v1,positional1.unsqueeze(1).repeat(1,self.num_heads,1,1)],dim=3)
-
-            x1 = (attn_1 @ v1).transpose(1, 2).reshape(B, N, C+int(6*self.num_heads))
-
-            # q1, k2, v2
-            attn_2 = (q1 @ k2.transpose(-2, -1)) * self.scale
-            attn_2 = attn_2.softmax(dim=-1)
-            attn_2 = self.attn_drop(attn_2)
-
-            positional2 = get_positional_encodings(B, N, intrinsics=intrinsics).cuda() # shape B,N,6
-            v2 = torch.cat([v2,positional2.unsqueeze(1).repeat(1,self.num_heads,1,1)],dim=3)
-
-            x2 = (attn_2 @ v2).transpose(1, 2).reshape(B, N, C+int(6*self.num_heads))
         else:
             # q2, k1, v1
             attn_1 = (q2 @ k1.transpose(-2, -1)) * self.scale
@@ -363,22 +273,18 @@ class CrossAttention(nn.Module):
 class CrossBlock(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
                  drop_path=0., act_layer=nn.GELU, \
-                 norm_layer=nn.LayerNorm, outer_prod=False, positional_encoding=False,
-                 use_essential_units=False,cross_features=False,
+                 norm_layer=nn.LayerNorm, cross_features=False,
                  get_attn_scores=False, 
                  not_get_outer_prods=False,
-                 attn_one_way=False, use_single_softmax=False, cnn_attn_plus_feats=False, seperate_tf_qkv=False,
+                 use_single_softmax=False, 
                  no_pos_encoding=False, noess=False, l1_pos_encoding=False):
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.cross_attn = CrossAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, \
                                 attn_drop=attn_drop, proj_drop=drop, \
-                                outer_prod=outer_prod, positional_encoding=positional_encoding,
-                                use_essential_units=use_essential_units,
                                 cross_features=cross_features,get_attn_scores=get_attn_scores,
-                                not_get_outer_prods=not_get_outer_prods, attn_one_way=attn_one_way,
-                                use_single_softmax=use_single_softmax, cnn_attn_plus_feats=cnn_attn_plus_feats,
-                                seperate_tf_qkv=seperate_tf_qkv, 
+                                not_get_outer_prods=not_get_outer_prods, 
+                                use_single_softmax=use_single_softmax, 
                                 no_pos_encoding=no_pos_encoding, noess=noess, l1_pos_encoding=l1_pos_encoding)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
@@ -386,13 +292,8 @@ class CrossBlock(nn.Module):
             self.norm2 = norm_layer(dim)
             mlp_hidden_dim = int(dim * mlp_ratio)
             self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-        self.outer_prod = outer_prod
-        self.positional_encoding = positional_encoding
-        if positional_encoding and outer_prod:
-            self.mlp2 = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
         self.get_attn_scores = get_attn_scores
         self.not_get_outer_prods = not_get_outer_prods
-        self.attn_one_way = attn_one_way
         self.noess = noess
 
     def forward(self, x, camera=None, intrinsics=None):
@@ -401,40 +302,21 @@ class CrossBlock(nn.Module):
         x1_in = x[:,0]
         x2_in = x[:,1]
 
-        if self.outer_prod and not self.noess:
-            if self.positional_encoding:
-                x1, fundamental1, x2, fundamental2 = self.cross_attn(self.norm1(x1_in), self.norm1(x2_in), camera, intrinsics=intrinsics)
+        if not self.noess:
+            if self.not_get_outer_prods:
+                attn_1, attn_2 = self.cross_attn(self.norm1(x1_in), self.norm1(x2_in), camera, intrinsics=intrinsics)
+                return torch.cat([attn_1.unsqueeze(1), attn_2.unsqueeze(1)], dim=1)
+            else:
+                fundamental1, fundamental2, attn_1, attn_2 = self.cross_attn(self.norm1(x1_in), self.norm1(x2_in), camera, intrinsics=intrinsics)
                 fundamental_inter = torch.cat([fundamental1.unsqueeze(1), fundamental2.unsqueeze(1)], dim=1)
                 fundamental = fundamental_inter.reshape(b_s, -1, nf)
                 fundamental = fundamental + self.drop_path(self.mlp(self.norm2(fundamental)))
 
-                x_inter = torch.cat([x1.unsqueeze(1), x2.unsqueeze(1)], dim=1)
-                x_inter = x_inter.reshape(b_s, h_w, nf)
-                x = x.reshape(b_s, h_w, nf)
-                x = x + self.drop_path(x_inter)
+                if self.get_attn_scores:
+                    attn = torch.cat([attn_1.unsqueeze(1), attn_2.unsqueeze(1)], dim=1)
+                    return fundamental, attn
 
-                x = x + self.drop_path(self.mlp2(self.norm2(x)))
-
-                return x, fundamental
-            else:
-                if self.not_get_outer_prods:
-                    if self.attn_one_way:
-                        attn_1 = self.cross_attn(self.norm1(x1_in), self.norm1(x2_in), camera, intrinsics=intrinsics)
-                        return attn_1.unsqueeze(1)
-                    else:
-                        attn_1, attn_2 = self.cross_attn(self.norm1(x1_in), self.norm1(x2_in), camera, intrinsics=intrinsics)
-                        return torch.cat([attn_1.unsqueeze(1), attn_2.unsqueeze(1)], dim=1)
-                else:
-                    fundamental1, fundamental2, attn_1, attn_2 = self.cross_attn(self.norm1(x1_in), self.norm1(x2_in), camera, intrinsics=intrinsics)
-                    fundamental_inter = torch.cat([fundamental1.unsqueeze(1), fundamental2.unsqueeze(1)], dim=1)
-                    fundamental = fundamental_inter.reshape(b_s, -1, nf)
-                    fundamental = fundamental + self.drop_path(self.mlp(self.norm2(fundamental)))
-
-                    if self.get_attn_scores:
-                        attn = torch.cat([attn_1.unsqueeze(1), attn_2.unsqueeze(1)], dim=1)
-                        return fundamental, attn
-
-                    return fundamental
+                return fundamental
         else:
             x1, x2 = self.cross_attn(self.norm1(x1_in), self.norm1(x2_in), camera, intrinsics=intrinsics)
             x_inter = torch.cat([x1.unsqueeze(1), x2.unsqueeze(1)], dim=1)
@@ -449,8 +331,7 @@ class CrossBlock(nn.Module):
 
 class Attention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., \
-                proj_drop=0., outer_prod=False, positional_encoding=False,
-                use_essential_units=False):
+                proj_drop=0.):
         super().__init__()
         dim_in = dim
 
@@ -458,58 +339,20 @@ class Attention(nn.Module):
         head_dim = dim // num_heads
         self.scale = head_dim ** -0.5
 
-        self.outer_prod = outer_prod
-        self.positional_encoding = positional_encoding
-
         self.qkv = nn.Linear(dim_in, dim_in * 3, bias=qkv_bias)
-
-        if self.outer_prod or positional_encoding:
-            if self.outer_prod:
-                self.proj_fundamental = nn.Linear(dim_in+int(6*self.num_heads), dim)
-            else:
-                self.proj = nn.Linear(dim_in+int(6*self.num_heads), dim)
-                self.proj_drop = nn.Dropout(proj_drop)
-                self.attn_drop = nn.Dropout(attn_drop)
-        else:
-            self.proj = nn.Linear(dim_in, dim)
-            self.proj_drop = nn.Dropout(proj_drop)
-            self.attn_drop = nn.Dropout(attn_drop)
-
-        self.use_essential_units = use_essential_units
+        self.proj = nn.Linear(dim_in, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+        self.attn_drop = nn.Dropout(attn_drop)
 
     def forward(self, x, camera=None, intrinsics=None):
         _, _, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
-        if self.outer_prod:
-            attn = (q @ k.transpose(-2, -1)) * self.scale
-            attn_fundamental = attn.softmax(dim=-1) * attn.softmax(dim=-2)
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
 
-            positional = get_positional_encodings(B, N, intrinsics=intrinsics).cuda() # shape B,N,6
-            v = torch.cat([v,positional.unsqueeze(1).repeat(1,self.num_heads,1,1)],dim=3)
-
-            fundamental = (v.transpose(-2, -1) @ attn_fundamental)
-            fundamental = fundamental @ (v)#2
-            fundamental = fundamental.reshape(B, int(C+6*self.num_heads), int((C+6*self.num_heads)/3)).transpose(-2,-1)
-            # fundamental is C/3+6,C/3+6 (for each head)
-
-            fundamental = self.proj_fundamental(fundamental)
-            return fundamental
-        elif self.positional_encoding:
-            attn = (q @ k.transpose(-2, -1)) * self.scale
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-
-            positional = get_positional_encodings(B, N, intrinsics=intrinsics).cuda() # shape B,N,6
-            v = torch.cat([v,positional.unsqueeze(1).repeat(1,self.num_heads,1,1)],dim=3)
-
-            x = (attn @ v).transpose(1, 2).reshape(B, N, C+int(6*self.num_heads))
-        else:
-            attn = (q @ k.transpose(-2, -1)) * self.scale
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-
-            x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
 
         x = self.proj(x)
         x = self.proj_drop(x)
@@ -519,32 +362,21 @@ class Attention(nn.Module):
 class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, \
-                 outer_prod=False,positional_encoding=False,
-                 use_essential_units=False):
+                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, \
-                        attn_drop=attn_drop, proj_drop=drop, \
-                        outer_prod=outer_prod, positional_encoding=positional_encoding,
-                        use_essential_units=use_essential_units)
+                        attn_drop=attn_drop, proj_drop=drop)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-        self.outer_prod = outer_prod
-            
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)           
 
     def forward(self, x, camera=None, intrinsics=None):
-        if self.outer_prod:
-            fundamental = self.attn(self.norm1(x), camera, intrinsics=intrinsics)
-            fundamental = fundamental + self.drop_path(self.mlp(self.norm2(fundamental)))
-            return fundamental
-        else:
-            identity = x 
-            out = x
-            x = identity + self.drop_path(self.attn(self.norm1(out), camera, intrinsics=intrinsics))
+        identity = x 
+        out = x
+        x = identity + self.drop_path(self.attn(self.norm1(out), camera, intrinsics=intrinsics))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
 
@@ -562,12 +394,10 @@ class VisionTransformer(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=True, representation_size=None, distilled=False,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0., embed_layer=PatchEmbed, norm_layer=None,
-                 act_layer=None, weight_init='', cross_image=[], outer_prod=[], 
-                 positional_encoding=[],
-                 use_essential_units=False, cross_features=False,
+                 act_layer=None, weight_init='', cross_attn=[], cross_features=False,
                  get_attn_scores=False, 
-                 not_get_outer_prods=False, attn_one_way=False, use_single_softmax=False, 
-                 cnn_attn_plus_feats=False, seperate_tf_qkv=False, no_pos_encoding=False,
+                 not_get_outer_prods=False, use_single_softmax=False, 
+                 no_pos_encoding=False,
                  noess=False, l1_pos_encoding=False):
         """
         Args:
@@ -608,31 +438,26 @@ class VisionTransformer(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
         block_list = []
         for i in range(depth):
-            if i in cross_image:
+            if i in cross_attn:
                 this_block = CrossBlock(dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, 
                             qkv_bias=qkv_bias, drop=drop_rate, attn_drop=attn_drop_rate, 
                             drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer, 
-                            outer_prod=i in outer_prod, positional_encoding=i in positional_encoding,
-                            use_essential_units=use_essential_units,
                             cross_features=cross_features,
                             get_attn_scores=get_attn_scores,
                             not_get_outer_prods=not_get_outer_prods,
-                            attn_one_way=attn_one_way, use_single_softmax=use_single_softmax, 
-                            cnn_attn_plus_feats=cnn_attn_plus_feats, seperate_tf_qkv=seperate_tf_qkv,
+                            use_single_softmax=use_single_softmax, 
                             no_pos_encoding=no_pos_encoding,
                             noess=noess, l1_pos_encoding=l1_pos_encoding)
             else:
                 this_block = Block(dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, 
                             qkv_bias=qkv_bias, drop=drop_rate, attn_drop=attn_drop_rate, 
-                            drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer, 
-                            outer_prod=i in outer_prod, positional_encoding=i in positional_encoding,
-                            use_essential_units=use_essential_units)
+                            drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer)
             block_list.append(this_block)
         self.blocks = nn.Sequential(*block_list)
         if not not_get_outer_prods:
             self.norm = norm_layer(embed_dim)
 
-        self.use_fundamental = len(outer_prod) > 0
+        self.use_fundamental = len(cross_attn) > 0
 
         # Representation layer
         if representation_size and not distilled:

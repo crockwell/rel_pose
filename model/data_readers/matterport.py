@@ -13,8 +13,6 @@ from .stream import RGBDStream
 import json
 
 cur_path = '/home/cnris/data/mp3d_rpnet_v4_sep20'
-with open(osp.join(cur_path, 'mp3d_planercnn_json/cached_set_val.json')) as f:
-    val_split = json.load(f)
 
 with open(osp.join(cur_path, 'mp3d_planercnn_json/cached_set_test.json')) as f:
     test_split = json.load(f)
