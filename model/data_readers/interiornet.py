@@ -156,7 +156,7 @@ class InteriorNet(RGBDDataset):
 
             poses = np.vstack([base_pose, rel_pose])
 
-            intrinsics = np.array([[128,128,128,128], [128,128,128,128]]) # 256x256 imgs, so we just make focal length & center 128
+            intrinsics = np.array([[128,128,128,128], [128,128,128,128]]) # 256x256 imgs
 
             scene_info['images'].append(images)
             scene_info['poses'] += [poses]
@@ -164,10 +164,6 @@ class InteriorNet(RGBDDataset):
             scene_info['angles'] += [angles]   
 
         return scene_info
-
-    @staticmethod
-    def calib_read():
-        return np.array([128,128,128,128])
 
     @staticmethod
     def image_read(image_file):

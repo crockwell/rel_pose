@@ -85,7 +85,6 @@ class Matterport(RGBDDataset):
             poses = np.vstack([base_pose, rel_pose])
 
             intrinsics = np.array([[517.97, 517.97, 320, 240], [517.97, 517.97, 320, 240]]) # 480 x 640 imgs
-            # focal length is pretty long, so when normalize intrinsics x goes -.6 to .6, y goes -.5. to .5
 
             scene_info['images'].append(images)
             scene_info['poses'] += [poses]
@@ -94,10 +93,6 @@ class Matterport(RGBDDataset):
             scene_info['class_tr'] += [self.xyz2class(og_rel_pose[0], og_rel_pose[1], og_rel_pose[2])]
 
         return scene_info
-
-    @staticmethod
-    def calib_read():
-        return np.array([320.0, 320.0, 320.0, 240.0])
 
     @staticmethod
     def image_read(image_file):

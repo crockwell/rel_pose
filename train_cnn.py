@@ -305,56 +305,61 @@ def train(gpu, args):
 
 if __name__ == '__main__':
     # TODO: get rid of gamma
-    # not_get_outer_prods
     # use_fixed_intrinsics inconsistency on some experiments?
     # get rid of absolute paths
+    # 90fov is 128 focal right?
+    # setup "get_dataset"
     # we forgot about cross_features ablation
-
+    # cite `How to train your ViT? Data, Augmentation, and Regularization in Vision Transformers`
+    # and `DeiT: Data-efficient Image Transformers` - https://arxiv.org/abs/2012.12877 for code
 
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--name', default='bla', help='name your experiment')
-    parser.add_argument('--ckpt', help='checkpoint to restore')
-    parser.add_argument('--datapath', help="path to dataset directory")
-    parser.add_argument('--gpus', type=int, default=4)
-    parser.add_argument('--no_ddp', action="store_true", default=False)
-    parser.add_argument('--fusion_transformer', action="store_true", default=False)
-    parser.add_argument('--fc_hidden_size', type=int, default=512)
-    parser.add_argument('--num_workers', type=int, default=4)
-    parser.add_argument('--dataset', default='matterport', choices=("matterport", "interiornet", 'streetlearn'))
-    parser.add_argument('--cross_indices', nargs='+', type=int, help='indices for cross-attention, if using cross_image transformer connectivity')
-    parser.add_argument('--outer_prod', nargs='+', type=int, help='indices for fundamental calc if using cross_image transformer connectivity')    
-    parser.add_argument('--pool_size', type=int, default=60)
-    parser.add_argument('--transformer_depth', type=int, default=6)
-    parser.add_argument('--gamma', type=float, default=0.9)
-    parser.add_argument('--cross_features', action='store_true')
-    parser.add_argument('--use_single_softmax', action='store_true')  
-    parser.add_argument('--weight_decay', type=float, default=1e-5)
-    parser.add_argument('--get_dataset', action='store_true')
-    parser.add_argument('--dset_size_tenths', type=int, default=10)
-    parser.add_argument('--streetlearn_interiornet_type', default='', choices=('',"nooverlap","T",'nooverlapT'))
 
-    parser.add_argument('--cnn_decoder_use_essential', action='store_true')
-    parser.add_argument('--no_pos_encoding', action='store_true')
-    parser.add_argument('--noess', action='store_true')
-
+    # training
+    parser.add_argument('--w_tr', type=float, default=10.0)
+    parser.add_argument('--w_rot', type=float, default=10.0)
+    parser.add_argument('--warmup', type=int, default=10000)
+    parser.add_argument('--use_fixed_geodesic', action="store_true", default=False)
     parser.add_argument('--batch', type=int, default=1)
     parser.add_argument('--steps', type=int, default=120000)
     parser.add_argument('--lr', type=float, default=5e-4)
     parser.add_argument('--clip', type=float, default=2.5)
-    parser.add_argument('--use_fixed_geodesic', action="store_true", default=False)
-    parser.add_argument('--l1_pos_encoding', action='store_true')
+    parser.add_argument('--weight_decay', type=float, default=1e-5)
+    parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--no_ddp', action="store_true", default=False)
+    parser.add_argument('--gpus', type=int, default=4)
+    parser.add_argument('--ckpt', help='checkpoint to restore')
+    parser.add_argument('--name', default='bla', help='name your experiment')
+    # data
+    parser.add_argument("--datapath")
+    parser.add_argument("--weights")
+    parser.add_argument("--image_size", default=[384,512])
+    parser.add_argument("--exp")
+    parser.add_argument("--checkpoint_dir")
+    parser.add_argument('--gamma', type=float, default=0.9)    
     parser.add_argument('--use_mini_dataset', action='store_true')
+    parser.add_argument('--streetlearn_interiornet_type', default='', choices=('',"nooverlap","T",'nooverlapT'))
+    parser.add_argument('--dset_size_tenths', type=int, default=10)
+    parser.add_argument('--get_dataset', action='store_true')
+    parser.add_argument('--dataset', default='matterport', choices=("matterport", "interiornet", 'streetlearn'))
 
-    parser.add_argument('--w_tr', type=float, default=10.0)
-    parser.add_argument('--w_rot', type=float, default=10.0)
-    parser.add_argument('--warmup', type=int, default=10000)
+    # model
+    parser.add_argument('--no_pos_encoding', action='store_true')
+    parser.add_argument('--noess', action='store_true')
+    parser.add_argument('--cross_features', action='store_true')
+    parser.add_argument('--use_single_softmax', action='store_true')  
+    parser.add_argument('--l1_pos_encoding', action='store_true')
+    parser.add_argument('--fusion_transformer', action="store_true", default=False)
+    parser.add_argument('--cross_attn', nargs='+', type=int, help='indices for cross-attention, if using cross_image transformer connectivity')
+    parser.add_argument('--fc_hidden_size', type=int, default=512)
+    parser.add_argument('--pool_size', type=int, default=60)
+    parser.add_argument('--transformer_depth', type=int, default=6)
 
     args = parser.parse_args()
     
     print(args)
 
-    import os
     PATHS = ['output/%s/checkpoints' % (args.name), 'output/%s/runs' % (args.name), 'output/%s/train_output/images' % (args.name)]
     args.existing_ckpt = None
 

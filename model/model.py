@@ -18,10 +18,6 @@ class ViTEss(nn.Module):
         self.num_images = 2
         self.pose_size = 7
 
-        self.cnn_decoder_use_essential = False
-        if 'cnn_decoder_use_essential' in args and args.cnn_decoder_use_essential:
-            self.cnn_decoder_use_essential = True
-
         self.no_pos_encoding = None
         if 'no_pos_encoding' in args and args.no_pos_encoding != '':
             self.no_pos_encoding = args.no_pos_encoding
@@ -65,8 +61,7 @@ class ViTEss(nn.Module):
                                 num_heads=self.num_heads, \
                                 cross_attn=args.cross_attn,
                                 cross_features=args.cross_features,
-                                get_attn_scores=(self.get_attn_scores or self.cnn_decoder_use_essential), 
-                                not_get_outer_prods=(not args.cnn_decoder_use_essential),
+                                get_attn_scores=self.get_attn_scores, 
                                 use_single_softmax=args.use_single_softmax,
                                 no_pos_encoding=args.no_pos_encoding,
                                 noess=args.noess, l1_pos_encoding=args.l1_pos_encoding)
@@ -250,15 +245,9 @@ class ViTEss(nn.Module):
 
                     last_fundamental = None
                     for layer in range(self.transformer_depth):
-                        
                         x = self.fusion_transformer.blocks[layer](x, intrinsics=intrinsics)
 
-                    if layer in self.cross_attn:
-                        if (self.get_attn_scores and not(not self.cnn_decoder_use_essential)) or (self.cnn_decoder_use_essential):
-                            (x, attention_scores) = x
-                        if not(not self.cnn_decoder_use_essential):
-                            features = self.fusion_transformer.norm(x)
-                    else:
+                    if layer not in self.cross_attn::
                         x = self.fusion_transformer.norm(x)
 
                         x = x.reshape([-1, 2, self.feature_resolution[0], self.feature_resolution[1], self.total_num_features//2])
