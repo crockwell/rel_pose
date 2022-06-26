@@ -9,7 +9,6 @@ import pickle
 
 from lietorch import SE3
 from .base import RGBDDataset
-from .stream import RGBDStream
 import json
 
 cur_path = '/home/cnris/data/mp3d_rpnet_v4_sep20'
@@ -98,74 +97,6 @@ class Matterport(RGBDDataset):
 
     @staticmethod
     def calib_read():
-        return np.array([320.0, 320.0, 320.0, 240.0])
-
-    @staticmethod
-    def image_read(image_file):
-        return cv2.imread(image_file)
-
-
-class MatterportStream(RGBDStream):
-    def __init__(self, datapath, **kwargs):
-        super(MatterportStream, self).__init__(datapath=datapath, **kwargs)
-
-    def _build_dataset_index(self):
-        """ build list of images, poses, depths, and intrinsics """
-        self.root = 'datasets/Matterport'
-
-        scene = osp.join(self.root, self.datapath)
-        image_glob = osp.join(scene, 'image_left/*.jpg') # was png
-        images = sorted(glob.glob(image_glob))
-
-        poses = np.loadtxt(osp.join(scene, 'pose_left.txt'), delimiter=' ')
-        poses = poses[:, [1, 2, 0, 4, 5, 3, 6]]
-
-        poses = SE3(torch.as_tensor(poses))
-        poses = poses[[0]].inv() * poses
-        poses = poses.data.cpu().numpy()
-
-        intrinsic = self.calib_read(self.datapath)
-        intrinsics = np.tile(intrinsic[None], (len(images), 1))
-
-        self.images = images[::int(self.frame_rate)]
-        self.poses = poses[::int(self.frame_rate)]
-        self.intrinsics = intrinsics[::int(self.frame_rate)]
-
-    @staticmethod
-    def calib_read(datapath):
-        return np.array([320.0, 320.0, 320.0, 240.0])
-
-    @staticmethod
-    def image_read(image_file):
-        return cv2.imread(image_file)
-
-
-class MatterportTestStream(RGBDStream):
-    def __init__(self, datapath, **kwargs):
-        super(MatterportTestStream, self).__init__(datapath=datapath, **kwargs)
-
-    def _build_dataset_index(self):
-        """ build list of images, poses, depths, and intrinsics """
-        self.root = 'datasets/mono'
-        image_glob = osp.join(self.root, self.datapath, '*.jpg') # png
-        images = sorted(glob.glob(image_glob))
-
-        poses = np.loadtxt(osp.join(self.root, 'mono_gt', self.datapath + '.txt'), delimiter=' ')
-        poses = poses[:, [1, 2, 0, 4, 5, 3, 6]]
-
-        poses = SE3(torch.as_tensor(poses))
-        poses = poses[[0]].inv() * poses
-        poses = poses.data.cpu().numpy()
-
-        intrinsic = self.calib_read(self.datapath)
-        intrinsics = np.tile(intrinsic[None], (len(images), 1))
-
-        self.images = images[::int(self.frame_rate)]
-        self.poses = poses[::int(self.frame_rate)]
-        self.intrinsics = intrinsics[::int(self.frame_rate)]
-
-    @staticmethod
-    def calib_read(datapath):
         return np.array([320.0, 320.0, 320.0, 240.0])
 
     @staticmethod

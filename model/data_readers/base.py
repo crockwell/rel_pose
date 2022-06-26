@@ -18,7 +18,7 @@ from .augmentation import RGBDAugmentor
 from .rgbd_utils import *
 
 class RGBDDataset(data.Dataset):
-    def __init__(self, name, datapath, n_frames=4, crop_size=[384,512], subepoch=None, \
+    def __init__(self, name, datapath, n_frames=4, reshape_size=[384,512], subepoch=None, \
                 is_training=True, gpu=0, use_fixed_intrinsics=False, 
                 use_optical_flow=False, streetlearn_interiornet_type=None,
                 use_mini_dataset=False):
@@ -31,7 +31,7 @@ class RGBDDataset(data.Dataset):
 
         self.use_optical_flow = use_optical_flow
         
-        self.aug = RGBDAugmentor(crop_size=crop_size, 
+        self.aug = RGBDAugmentor(reshape_size=reshape_size, 
             use_fixed_intrinsics=use_fixed_intrinsics, datapath=datapath)
         print(self.name)
         self.matterport = False

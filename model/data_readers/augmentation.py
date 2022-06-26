@@ -7,9 +7,9 @@ import torch.nn.functional as F
 class RGBDAugmentor:
     """ perform augmentation on RGB-D video """
 
-    def __init__(self, crop_size, use_fixed_intrinsics=False,
+    def __init__(self, reshape_size, use_fixed_intrinsics=False,
                     datapath=None):
-        self.crop_size = crop_size
+        self.reshape_size = reshape_size
         p_gray = 0.1
         self.augcolor = transforms.Compose([
             transforms.ToPILImage(),
@@ -17,49 +17,11 @@ class RGBDAugmentor:
             transforms.RandomGrayscale(p=p_gray),
             transforms.ToTensor()])
 
-        self.max_scale = max_scale
         self.use_fixed_intrinsics = use_fixed_intrinsics
 
         self.streetlearn = False
         if 'streetlearn' in datapath:
             self.streetlearn = True
-
-    def spatial_transform(self, images, disps, poses, intrinsics):
-        """ cropping and resizing """
-        ht, wd = images.shape[2:]
-
-        max_scale = self.max_scale
-        min_scale = np.log2(np.maximum(
-            (self.crop_size[0] + 1) / float(ht),
-            (self.crop_size[1] + 1) / float(wd)))
-
-        """
-        Summary: performs crop & scale which affects resolution
-        and center location, modifying intrinsics. pose not affected.
-        depth / image not affected other than resolution & center crop.
-        """
-
-        scale = 2 ** np.random.uniform(min_scale, max_scale)
-        intrinsics = scale * intrinsics # make focal length slightly larger (or smaller), meaning lens is narrower and zoomed in (or wider and zoomed out)
-        disps = disps.unsqueeze(dim=1)
-
-        images = F.interpolate(images, scale_factor=scale, mode='bilinear', 
-            align_corners=False, recompute_scale_factor=True) # increased scale -> increased focal length & zoomed in -> increased resolution
-        
-        disps = F.interpolate(disps, scale_factor=scale, recompute_scale_factor=True) 
-
-        # always perform center crop
-        y0 = (images.shape[2] - self.crop_size[0]) // 2
-        x0 = (images.shape[3] - self.crop_size[1]) // 2
-
-        intrinsics = intrinsics - torch.tensor([0.0, 0.0, x0, y0])
-        images = images[:, :, y0:y0+self.crop_size[0], x0:x0+self.crop_size[1]]
-        disps = disps[:, :, y0:y0+self.crop_size[0], x0:x0+self.crop_size[1]]
-
-        disps = disps.squeeze(dim=1)
-
-        # out size is 384, 512. x0 = amount have to crop / 2 from input 480, 640 +- resolution
-        return images, poses, intrinsics, disps
 
     def color_transform(self, images):
         """ color jittering """
@@ -75,7 +37,7 @@ class RGBDAugmentor:
             return images, poses, intrinsics, disps
 
         if hasattr(self, 'use_fixed_intrinsics') and self.use_fixed_intrinsics:
-            sizey, sizex = self.crop_size
+            sizey, sizex = self.reshape_size
             scalex = sizex / images.shape[-1]
             scaley = sizey / images.shape[-2]
             xidx = np.array([0,2])
@@ -83,5 +45,5 @@ class RGBDAugmentor:
             intrinsics[:,xidx] = scalex * intrinsics[:,xidx]
             intrinsics[:,yidx] = scaley * intrinsics[:,yidx]
             
-        images = F.interpolate(images, size=self.crop_size)
+        images = F.interpolate(images, size=self.reshape_size)
         return images, poses, intrinsics, disps

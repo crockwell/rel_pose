@@ -306,6 +306,8 @@ def train(gpu, args):
 if __name__ == '__main__':
     # TODO: get rid of gamma
     # not_get_outer_prods
+    # use_fixed_intrinsics inconsistency on some experiments?
+    # get rid of absolute paths
     # we forgot about cross_features ablation
 
 

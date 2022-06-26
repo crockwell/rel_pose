@@ -1,8 +1,4 @@
 
-import pickle
-import os
-import os.path as osp
-
 # RGBD-Dataset
 from .matterport import Matterport
 from .streetlearn import StreetLearn
