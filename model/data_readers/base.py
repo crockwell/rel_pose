@@ -15,50 +15,27 @@ import os.path as osp
 import time
 
 from .augmentation import RGBDAugmentor
-from .rgbd_utils import *
 
 class RGBDDataset(data.Dataset):
-    def __init__(self, name, datapath, n_frames=4, reshape_size=[384,512], subepoch=None, \
+    def __init__(self, name, datapath, reshape_size=[384,512], subepoch=None, \
                 is_training=True, gpu=0, use_fixed_intrinsics=False, 
-                use_optical_flow=False, streetlearn_interiornet_type=None,
+                streetlearn_interiornet_type=None,
                 use_mini_dataset=False):
         """ Base class for RGBD dataset """
         self.root = datapath
         self.name = name
         self.streetlearn_interiornet_type = streetlearn_interiornet_type
-
-        self.n_frames = n_frames
-
-        self.use_optical_flow = use_optical_flow
         
         self.aug = RGBDAugmentor(reshape_size=reshape_size, 
             use_fixed_intrinsics=use_fixed_intrinsics, datapath=datapath)
         print(self.name)
         self.matterport = False
-        self.streetlearn_interiornet = False
         if 'mp3d' in datapath:
             self.matterport = True
             self.scene_info = self._build_dataset(subepoch==10)
         elif 'StreetLearn' in self.name or 'InteriorNet' in self.name:
             self.use_mini_dataset = use_mini_dataset
-            self.streetlearn_interiornet = True
             self.scene_info = self._build_dataset(subepoch)
-                
-    def _build_dataset_index(self, is_training=True):
-        self.dataset_index = []
-        held_out_type = 'validation'
-        if not is_training:
-            held_out_type = 'training'
-        for scene in self.scene_info:
-            skip_scene = False
-            if (not self.__class__.is_test_scene(scene) and is_training) or \
-                (self.__class__.is_test_scene(scene) and not is_training):            
-                graph = self.scene_info[scene]['graph']
-                for i in graph:
-                    if len(graph[i][0]) > self.n_frames:
-                        self.dataset_index.append((scene, i))
-            else:
-                print("Reserving {} for {}".format(scene, held_out_type))
 
     @staticmethod
     def image_read(image_file):
@@ -70,8 +47,6 @@ class RGBDDataset(data.Dataset):
             images_list = self.scene_info['images'][index]
             poses = self.scene_info['poses'][index]
             intrinsics = self.scene_info['intrinsics'][index]
-            class_rot = self.scene_info['class_rot'][index]
-            class_tr = self.scene_info['class_tr'][index]
 
             images = []
             for i in range(2):
@@ -79,8 +54,6 @@ class RGBDDataset(data.Dataset):
 
             poses = np.stack(poses).astype(np.float32)
             intrinsics = np.stack(intrinsics).astype(np.float32)
-            class_rot = np.stack(class_rot).astype(np.float32)
-            class_tr = np.stack(class_tr).astype(np.float32)
 
             images = np.stack(images).astype(np.float32)
             images = torch.from_numpy(images).float()
@@ -88,14 +61,13 @@ class RGBDDataset(data.Dataset):
 
             poses = torch.from_numpy(poses)
             intrinsics = torch.from_numpy(intrinsics)
-            class_rot = torch.from_numpy(class_rot)
-            class_tr = torch.from_numpy(class_tr)
 
-            images, poses, intrinsics, _ = self.aug(images, poses, intrinsics)
+            images, poses, intrinsics = self.aug(images, poses, intrinsics)
             
-            return images, poses, intrinsics, class_rot, class_tr
-        elif self.streetlearn_interiornet:
+            return images, poses, intrinsics
+        else:
             local_index = index
+            # in case index fails
             while True:
                 try:
                     images_list = self.scene_info['images'][local_index]
@@ -118,7 +90,7 @@ class RGBDDataset(data.Dataset):
                     poses = torch.from_numpy(poses)
                     intrinsics = torch.from_numpy(intrinsics)
 
-                    images, poses, intrinsics, _ = self.aug(images, poses, intrinsics)
+                    images, poses, intrinsics = self.aug(images, poses, intrinsics)
                     
                     return images, poses, intrinsics, angles
                 except:
@@ -126,14 +98,4 @@ class RGBDDataset(data.Dataset):
                     continue
 
     def __len__(self):
-        if self.matterport:
-            return len(self.scene_info['images'])
-        elif self.streetlearn_interiornet:
-            return len(self.scene_info['images'])
-
-    def __imul__(self, x):
-        if self.matterport:
-            self.scene_info['images'] *= x
-            return self
-        self.dataset_index *= x
-        return self
+        return len(self.scene_info['images'])

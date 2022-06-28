@@ -1,4 +1,3 @@
-import cv2
 import numpy as np
 from collections import OrderedDict
 
@@ -8,15 +7,8 @@ from torch.utils.data import DataLoader
 from data_readers.factory import dataset_factory
 
 import lietorch
-from lietorch import SO3, SE3, Sim3
-from geom import losses, projective_ops
+from lietorch import SE3
 from geom.losses import geodesic_loss, fixed_geodesic_loss
-
-import torch 
-import torchvision
-import torchvision.models as models
-import torch.nn as nn
-import torch.nn.functional as F
 
 # network
 from model import ViTEss
@@ -30,20 +22,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
 import random
 from datetime import datetime
-
 import os
-#os.environ["NCCL_BLOCKING_WAIT"] = "1"
-#os.environ['TORCH_DISTRIBUTED_DEBUG'] = 'DETAIL'
-#os.environ['NCCL_DEBUG'] = 'INFO'
-#torch.autograd.set_detect_anomaly(True)
-
-#torch.backends.cudnn.benchmark = True
-#torch.backends.cudnn.deterministic = False
-import warnings
-warnings.filterwarnings("ignore")
-
-from os import listdir
-from os.path import isfile, join
 
 def setup_ddp(gpu, args):
     dist.init_process_group(                                   
@@ -54,16 +33,6 @@ def setup_ddp(gpu, args):
 
     torch.manual_seed(0)
     torch.cuda.set_device(gpu)
-
-def show_image(image):
-    image = image.permute(1, 2, 0).cpu().numpy()
-    cv2.imshow('image', image / 255.0)
-    cv2.waitKey()
-
-def lietorch_numpy_mult(a, b):
-    a = lietorch.SE3(torch.from_numpy(a).float())
-    b = lietorch.SE3(torch.from_numpy(b).float())
-    return (a * b).data.numpy()
 
 def train(gpu, args):
     """ Test to make sure project transform correctly maps points """
@@ -86,6 +55,7 @@ def train(gpu, args):
     model.to(thiscuda)
     model.train()
         
+    # unused layers
     for param in model.resnet.layer4.parameters():
         param.requires_grad = False
 
@@ -95,26 +65,11 @@ def train(gpu, args):
     if not args.no_ddp:
         model = DDP(model, device_ids=[gpu], find_unused_parameters=False)
 
-    if args.weight_decay > 1e-5:
-        decay = []
-        no_decay = []
-        for name, param in model.named_parameters():
-            print('checking {}'.format(name))
-            if 'fusion_transformer' in name:
-                decay.append(param)
-            else:
-                no_decay.append(param)
-        optimizer = torch.optim.Adam([{'params': no_decay, 'weight_decay': 0}, {'params': decay}], lr=args.lr, weight_decay=args.weight_decay)        
-    else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     
-    if args.warmup > 0:
-        pct_warmup = args.warmup / args.steps
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, 
-            args.lr, args.steps, pct_start=pct_warmup, div_factor=25, cycle_momentum=False)
-    else:
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, 
-            args.lr, args.steps, pct_start=0.01, cycle_momentum=False)
+    pct_warmup = args.warmup / args.steps
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, 
+        args.lr, args.steps, pct_start=pct_warmup, div_factor=25, cycle_momentum=False)
 
     if args.ckpt is not None:
         print('loading separate checkpoint')
@@ -150,18 +105,10 @@ def train(gpu, args):
     logger = Logger(args.name, scheduler)
     should_keep_training = True
 
-    torch.autograd.set_detect_anomaly(True)
+    subepoch = 0
 
-    if 'get_dataset' in args and args.get_dataset:
-        subepoch = None 
-    else:
-        subepoch = 0
-
-    subepoch = 10-args.dset_size_tenths
-    print('using',args.dset_size_tenths,'tenths of the dataset')
-    train_steps = scheduler.state_dict()['last_epoch']
-    epoch_count = train_steps // (300000 / (args.gpus * args.batch))
-    print(epoch_count, train_steps)
+    train_steps = 0
+    epoch_count = 0
     while should_keep_training:
         is_training = True
         train_val = 'train'
@@ -192,60 +139,34 @@ def train(gpu, args):
             for i_batch, item in enumerate(tepoch):
                 optimizer.zero_grad()
 
-                if args.dataset == 'matterport':
-                    images, poses, intrinsics, class_rot, class_tr = [x.to('cuda') for x in item]
-                elif 'streetlearn' in args.dataset or 'interiornet' in args.dataset:
-                    images, poses, intrinsics, angles = [x.to('cuda') for x in item]
-                else:
-                    images, poses, intrinsics = [x.to('cuda') for x in item]
-                
-                if args.dataset == 'matterport' or 'streetlearn' in args.dataset or 'interiornet' in args.dataset:
-                    Ps = SE3(poses)
-                else:
-                    # convert poses w2c -> c2w
-                    Ps = SE3(poses).inv()
-
-                    transformation = Ps[:,:1].inv()
-                    www = [transformation] * 2
-                    inverse_Ps = lietorch.cat(www, 1)
-                    transformed_Ps = Ps * inverse_Ps 
-                    Ps = transformed_Ps
-
+                images, poses, intrinsics = [x.to('cuda') for x in item]
+                Ps = SE3(poses)
                 Gs = SE3.IdentityLike(Ps)
-
                 Ps_out = SE3(Ps.data.clone())               
 
                 graph = OrderedDict()
                 for i in range(N):
                     graph[i] = [j for j in range(N) if i!=j and abs(i-j) <= 2]
-
-                    
-                intrinsics0 = intrinsics
-                
+                                    
                 metrics = {}
 
                 if not is_training:
                     with torch.no_grad():
-                        poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics0)
+                        poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics)
                         
                         if args.use_fixed_geodesic:
-                            geo_loss_tr, geo_loss_rot, rotation_mag, geo_metrics = losses.fixed_geodesic_loss(Ps_out, poses_est, train_val=train_val)
+                            geo_loss_tr, geo_loss_rot, rotation_mag, geo_metrics = fixed_geodesic_loss(Ps_out, poses_est, train_val=train_val)
                         else:
-                            geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = losses.geodesic_loss(Ps_out, poses_est, \
+                            geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = geodesic_loss(Ps_out, poses_est, \
                                     graph, do_scale=False, train_val=train_val, gamma=args.gamma)
-
                 else:
-                    poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics0)
+                    poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics)
                     if args.use_fixed_geodesic:
-                        geo_loss_tr, geo_loss_rot, rotation_mag, geo_metrics = losses.fixed_geodesic_loss(Ps_out, poses_est, train_val=train_val)
-                        pass
+                        geo_loss_tr, geo_loss_rot, rotation_mag, geo_metrics = fixed_geodesic_loss(Ps_out, poses_est, train_val=train_val)
                     else:
-                        geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = losses.geodesic_loss(Ps_out, poses_est, 
+                        geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = geodesic_loss(Ps_out, poses_est, 
                                     graph, do_scale=False, train_val=train_val, gamma=args.gamma)
-                
-                metrics.update(geo_metrics)
 
-                if is_training:
                     loss = args.w_tr * geo_loss_tr + args.w_rot * geo_loss_rot
 
                     loss.backward()
@@ -255,21 +176,20 @@ def train(gpu, args):
                     
                     scheduler.step() 
                     train_steps += 1
-                                    
+                
+                metrics.update(geo_metrics)                                    
 
                 if gpu == 0 or args.no_ddp:
                     logger.push(metrics)
 
                     if i_batch % 20 == 0:
                         torch.set_printoptions(sci_mode=False, linewidth=150)
-                        for jjj in range(len(poses_est)):
-                            print('pred number:', jjj, 'gamma', args.gamma ** (len(poses_est) - jjj - 1))
+                        for local_index in range(len(poses_est)):
+                            print('pred number:', local_index, 'gamma', args.gamma ** (len(poses_est) - local_index - 1))
                             print('\n estimated pose')
-                            print(poses_est[jjj].data[0,:7,:].cpu().detach())
+                            print(poses_est[local_index].data[0,:7,:].cpu().detach())
                             print('ground truth pose')
                             print(Ps_out.data[0,:7,:].cpu().detach())
-                            print('diff')
-                            print(poses_est[jjj].data[0,:7,:].cpu().detach() - Ps_out.data[0,:7,:].cpu().detach())
                             print('')
                     if (i_batch + 10) % 20 == 0:
                         print('\n metrics:', metrics, '\n')
@@ -296,22 +216,41 @@ def train(gpu, args):
        
         subepoch = (subepoch + 1)
         if subepoch == 11:
-            subepoch = 10-args.dset_size_tenths
+            subepoch = 0
             epoch_count += 1
 
     dist.destroy_process_group()
-        
-                
 
 if __name__ == '__main__':
     # TODO: get rid of gamma
-    # use_fixed_intrinsics inconsistency on some experiments?
+    # make sure our 1k on streetlearn are correct 1k. 
+    # turn off validation for interniornet & streetlearn
+    # use_fixed_intrinsics inconsistency on some experiments? get rid of it.
     # get rid of absolute paths
     # 90fov is 128 focal right?
-    # setup "get_dataset"
+    # change impl to not predict dead first pose, only second?
+    # clean up fixed_geodesic
+    # clean up "for i in range(N): graph[i] = [j for j in range(N) if i!=j and abs(i-j) <= 2]"
+    # clean for path in paths shit
+    # whats going on with streetlearn in augmentation?
     # we forgot about cross_features ablation
     # cite `How to train your ViT? Data, Augmentation, and Regularization in Vision Transformers`
     # and `DeiT: Data-efficient Image Transformers` - https://arxiv.org/abs/2012.12877 for code
+    # on matterport, we scale depths to balance rot & trans loss
+    # DEPTH_SCALE = 5.0
+    # careful on reshape size
+
+    # debugging:
+    #os.environ["NCCL_BLOCKING_WAIT"] = "1"
+    #os.environ['TORCH_DISTRIBUTED_DEBUG'] = 'DETAIL'
+    #os.environ['NCCL_DEBUG'] = 'INFO'
+    #torch.autograd.set_detect_anomaly(True)
+
+    #torch.backends.cudnn.benchmark = True
+    #torch.backends.cudnn.deterministic = False
+    #import warnings
+    #warnings.filterwarnings("ignore")
+    #    torch.autograd.set_detect_anomaly(True)
 
     import argparse
     parser = argparse.ArgumentParser()
@@ -340,8 +279,6 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, default=0.9)    
     parser.add_argument('--use_mini_dataset', action='store_true')
     parser.add_argument('--streetlearn_interiornet_type', default='', choices=('',"nooverlap","T",'nooverlapT'))
-    parser.add_argument('--dset_size_tenths', type=int, default=10)
-    parser.add_argument('--get_dataset', action='store_true')
     parser.add_argument('--dataset', default='matterport', choices=("matterport", "interiornet", 'streetlearn'))
 
     # model
@@ -368,7 +305,7 @@ if __name__ == '__main__':
             os.makedirs(PATH)
         except:
             if 'checkpoints' in PATH:
-                ckpts = listdir(PATH)
+                ckpts = os.listdir(PATH)
 
                 if len(ckpts) > 0:
                     if 'most_recent_ckpt.pth' in ckpts:

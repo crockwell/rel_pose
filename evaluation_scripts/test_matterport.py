@@ -141,7 +141,7 @@ if __name__ == '__main__':
     
     train_val = ''
     predictions = {'camera': {'preds': {'tran': [], 'rot': []}, 'gts': {'tran': [], 'rot': []}}}
-    metrics = {'_geo_loss_tr': [], '_geo_loss_rot': [], '_class_loss_tr': [], '_class_loss_rot': []}
+    metrics = {'_geo_loss_tr': [], '_geo_loss_rot': []}
 
     for i in tqdm(range(len(dset['data']))):
         images = []
@@ -174,27 +174,19 @@ if __name__ == '__main__':
 
         Gs = SE3.IdentityLike(Ps)
 
-        class_rot = kmeans_rots.predict([[og_rel_pose[3], og_rel_pose[4], og_rel_pose[5], og_rel_pose[6]]])
-        class_rot = torch.from_numpy(class_rot).unsqueeze(0).cuda()
-
-        class_tr = kmeans_trans.predict([[og_rel_pose[0], og_rel_pose[1], og_rel_pose[2]]])
-        class_tr = torch.from_numpy(class_tr).unsqueeze(0).cuda()
-
         N=2
         graph = OrderedDict()
         for ll in range(N):
             graph[ll] = [j for j in range(N) if ll!=j and abs(ll-j) <= 2]
-            
-        intrinsics0 = intrinsics
-        
+                    
         with torch.no_grad():
-            poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics0)
+            poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics)
             geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = losses.geodesic_loss(Ps, poses_est, \
                     graph, do_scale=False, train_val=train_val, gamma=args.gamma)
 
         predictions['camera']['gts']['tran'].append(dset['data'][i]['rel_pose']['position'])
         gt_rotation = dset['data'][i]['rel_pose']['rotation']
-        if gt_rotation[0] < 0:
+        if gt_rotation[0] < 0: # normalize quaternions to have positive "W"
             gt_rotation[0] *= -1
             gt_rotation[1] *= -1
             gt_rotation[2] *= -1
@@ -205,7 +197,7 @@ if __name__ == '__main__':
         pr_copy = np.copy(preds)
         preds[3] = pr_copy[6] # swap 3 & 6, we used W last; want W first in quat
         preds[6] = pr_copy[3]
-        preds[:3] = preds[:3] * DEPTH_SCALE
+        preds[:3] = preds[:3] * DEPTH_SCALE # undo scale change we made during training
 
         predictions['camera']['preds']['tran'].append(preds[:3])
         predictions['camera']['preds']['rot'].append(preds[3:])

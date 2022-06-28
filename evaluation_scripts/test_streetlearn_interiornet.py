@@ -55,7 +55,6 @@ def compute_rotation_matrix_from_two_matrices(m1, m2):
 def compute_rotation_matrix_from_viewpoint(rotation_x, rotation_y, batch):
     rotax = rotation_x.view(batch, 1).type(torch.FloatTensor)
     rotay = - rotation_y.view(batch, 1).type(torch.FloatTensor)
-    # rotaz = torch.zeros(batch, 1)
 
     c1 = torch.cos(rotax).view(batch, 1)  # batch*1
     s1 = torch.sin(rotax).view(batch, 1)  # batch*1
@@ -70,7 +69,6 @@ def compute_rotation_matrix_from_viewpoint(rotation_x, rotation_y, batch):
     matrix = torch.cat((row1, row2, row3), 1)  # batch*3*3
 
     return matrix
-
 
 def evaluation_metric_rotation(predict_rotation, gt_rotation, save_folder):
     geodesic_loss = compute_geodesic_distance_from_two_matrices(predict_rotation.view(-1, 3, 3),
@@ -135,52 +133,7 @@ def compute_gt_rmat(rotation_x1, rotation_y1, rotation_x2, rotation_y2, batch_si
     gt_mtx1 = compute_rotation_matrix_from_viewpoint(rotation_x1, rotation_y1, batch_size).view(batch_size, 3, 3)
     gt_mtx2 = compute_rotation_matrix_from_viewpoint(rotation_x2, rotation_y2, batch_size).view(batch_size, 3, 3)
     gt_rmat_matrix = compute_rotation_matrix_from_two_matrices(gt_mtx2, gt_mtx1).view(batch_size, 3, 3)
-    return gt_rmat_matrix
-
-def compute_rotation_matrix_from_euler_angle(rotation_x, rotation_y, rotation_z=None, batch=None):
-    rotax = rotation_x.view(batch, 1).type(torch.FloatTensor)
-    rotay = rotation_y.view(batch, 1).type(torch.FloatTensor)
-    if rotation_z is None:
-        rotaz = torch.zeros(batch, 1)
-    else:
-        rotaz = rotation_z.view(batch, 1).type(torch.FloatTensor)
-
-    c3 = torch.cos(rotax).view(batch, 1)  
-    s3 = torch.sin(rotax).view(batch, 1)  
-    c2 = torch.cos(rotay).view(batch, 1)  
-    s2 = torch.sin(rotay).view(batch, 1)  
-    c1 = torch.cos(rotaz).view(batch, 1)  
-    s1 = torch.sin(rotaz).view(batch, 1) 
-
-    row1 = torch.cat((c1 * c2, c1 * s2 * s3 - s1 * c3, c1 * s2 * c3 + s1 * s3), 1).view(-1, 1, 3)  # batch*1*3
-    row2 = torch.cat((s1 * c2, s1 * s2 * s3 + c1 * c3, s1 * s2 * c3 - c1 * s3), 1).view(-1, 1, 3)  # batch*1*3
-    row3 = torch.cat((-s2, c2 * s3, c2 * c3), 1).view(-1, 1, 3)  # batch*1*3
-
-    matrix = torch.cat((row1, row2, row3), 1)  # batch*3*3
-
-    return matrix
-    
-def compute_euler_angles_from_rotation_matrices(rotation_matrices):
-    batch = rotation_matrices.shape[0]
-    R = rotation_matrices
-    sy = torch.sqrt(R[:, 0, 0] * R[:, 0, 0] + R[:, 1, 0] * R[:, 1, 0])
-    singular = sy < 1e-6
-    singular = singular.float()
-
-    x = torch.atan2(R[:, 2, 1], R[:, 2, 2])
-    y = torch.atan2(-R[:, 2, 0], sy)
-    z = torch.atan2(R[:, 1, 0], R[:, 0, 0])
-
-    xs = torch.atan2(-R[:, 1, 2], R[:, 1, 1])
-    ys = torch.atan2(-R[:, 2, 0], sy)
-    zs = R[:, 1, 0] * 0
-
-    rotation_x = x * (1 - singular) + xs * singular
-    rotation_y = y * (1 - singular) + ys * singular
-    rotation_z = z * (1 - singular) + zs * singular
-
-    return rotation_x, rotation_y, rotation_z
-    
+    return gt_rmat_matrix   
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -233,17 +186,6 @@ if __name__ == '__main__':
 
     print('performing evaluation on %s set using model %s' % (output_folder, args.checkpoint_dir))
 
-    ate_list = []
-    named_ates = []   
-    geo_list_tr = []
-    named_geos_tr = []
-    geo_list_rot = []
-    named_geos_rot = []
-    rotation_mags_list = []
-    rotation_mags_gt_list = []
-    named_rotation_mags = []
-    named_rotation_mags_gt = []
-
     checkpoint_dir = args.exp
     if args.checkpoint_dir is not None:
         checkpoint_dir = args.checkpoint_dir
@@ -263,16 +205,14 @@ if __name__ == '__main__':
     
     train_val = ''
     predictions = {'camera': {'preds': {'tran': [], 'rot': []}, 'gts': {'tran': [], 'rot': []}}}
-    metrics = {'_geo_loss_tr': [], '_geo_loss_rot': [], 
-                '_class_loss_x': [], '_class_loss_y': [],
-                '_class_loss_z': []}
+    metrics = {'_geo_loss_tr': [], '_geo_loss_rot': []}
 
     sorted(dset.keys())
 
     for i, dset_i in tqdm(sorted(dset.items())):
         if args.dataset == 'interiornet':
             if i > 999:
-                continue
+                break
         base_pose = np.array([0,0,0,0,0,0,1])
 
         images = [cv2.imread(os.path.join(cur_path, 'data', args.dataset, dset[i]['img1']['path'])),
@@ -283,11 +223,6 @@ if __name__ == '__main__':
 
         # compute rotation matrix
         gt_rmat = compute_gt_rmat(torch.tensor([[x1]]), torch.tensor([[y1]]), torch.tensor([[x2]]), torch.tensor([[y2]]), 1)
-
-        angle_x, angle_y, angle_z = compute_euler_angles_from_rotation_matrices(gt_rmat)
-        angles = np.array([angle_x.item(), angle_y.item(), angle_z.item()])
-        angles = np.stack(angles).astype(np.float32)
-        angles = torch.from_numpy(angles).unsqueeze(0).cuda()
 
         # get quaternions from rotation matrix
         r = R.from_matrix(gt_rmat)
@@ -305,7 +240,7 @@ if __name__ == '__main__':
         
         poses = np.vstack([base_pose, rel_pose]).astype(np.float32)
         poses = torch.from_numpy(poses).unsqueeze(0).cuda()
-        Ps = SE3(poses)#.inv()
+        Ps = SE3(poses)
 
         Gs = SE3.IdentityLike(Ps)
 
@@ -314,11 +249,9 @@ if __name__ == '__main__':
         graph = OrderedDict()
         for ll in range(N):
             graph[ll] = [j for j in range(N) if ll!=j and abs(ll-j) <= 2]
-            
-        intrinsics0 = intrinsics
-        
+                    
         with torch.no_grad():
-            poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics0)
+            poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics)
             geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = losses.geodesic_loss(Ps, poses_est, \
                     graph, do_scale=False, train_val=train_val, gamma=args.gamma)
             preds = poses_est[0][0][1].data.cpu().numpy()
@@ -328,8 +261,6 @@ if __name__ == '__main__':
 
         predictions['camera']['preds']['tran'].append(preds[:3])
         predictions['camera']['preds']['rot'].append(preds[3:])
-
-        print(preds[3:])
 
         metrics['_geo_loss_tr'].append(geo_metrics['_geo_loss_tr'])
         metrics['_geo_loss_rot'].append(geo_metrics['_geo_loss_rot'])

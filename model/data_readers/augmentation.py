@@ -30,11 +30,11 @@ class RGBDAugmentor:
         images = 255 * self.augcolor(images[[2,1,0]] / 255.0)
         return images[[2,1,0]].reshape(ch, ht, wd, num).permute(3,0,1,2).contiguous()
 
-    def __call__(self, images, poses, intrinsics, disps=None):
+    def __call__(self, images, poses, intrinsics):
         images = self.color_transform(images)
 
         if self.streetlearn:
-            return images, poses, intrinsics, disps
+            return images, poses, intrinsics
 
         if hasattr(self, 'use_fixed_intrinsics') and self.use_fixed_intrinsics:
             sizey, sizex = self.reshape_size
@@ -46,4 +46,4 @@ class RGBDAugmentor:
             intrinsics[:,yidx] = scaley * intrinsics[:,yidx]
             
         images = F.interpolate(images, size=self.reshape_size)
-        return images, poses, intrinsics, disps
+        return images, poses, intrinsics

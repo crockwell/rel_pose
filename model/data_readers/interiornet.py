@@ -24,13 +24,8 @@ class InteriorNet(RGBDDataset):
 
     def __init__(self, mode='training', **kwargs):
         self.mode = mode
-        self.n_frames = 2
 
         super(InteriorNet, self).__init__(name='InteriorNet', **kwargs)
-
-    @staticmethod 
-    def is_test_scene(scene):
-        return any(x in scene for x in test_split)
 
     def compute_rotation_matrix_from_two_matrices(self, m1, m2):
         batch = m1.shape[0]
@@ -59,30 +54,7 @@ class InteriorNet(RGBDDataset):
         gt_mtx1 = self.compute_rotation_matrix_from_viewpoint(rotation_x1, rotation_y1, batch_size).view(batch_size, 3, 3)
         gt_mtx2 = self.compute_rotation_matrix_from_viewpoint(rotation_x2, rotation_y2, batch_size).view(batch_size, 3, 3)
         gt_rmat_matrix = self.compute_rotation_matrix_from_two_matrices(gt_mtx2, gt_mtx1).view(batch_size, 3, 3)
-        return gt_rmat_matrix
-
-    
-    def compute_euler_angles_from_rotation_matrices(self, rotation_matrices):
-        batch = rotation_matrices.shape[0]
-        R = rotation_matrices
-        sy = torch.sqrt(R[:, 0, 0] * R[:, 0, 0] + R[:, 1, 0] * R[:, 1, 0])
-        singular = sy < 1e-6
-        singular = singular.float()
-
-        x = torch.atan2(R[:, 2, 1], R[:, 2, 2])
-        y = torch.atan2(-R[:, 2, 0], sy)
-        z = torch.atan2(R[:, 1, 0], R[:, 0, 0])
-
-        xs = torch.atan2(-R[:, 1, 2], R[:, 1, 1])
-        ys = torch.atan2(-R[:, 2, 0], sy)
-        zs = R[:, 1, 0] * 0
-
-        rotation_x = x * (1 - singular) + xs * singular
-        rotation_y = y * (1 - singular) + ys * singular
-        rotation_z = z * (1 - singular) + zs * singular
-
-        return rotation_x, rotation_y, rotation_z
-    
+        return gt_rmat_matrix    
 
     def _build_dataset(self, subepoch):
         valid = (subepoch==10)
@@ -91,7 +63,7 @@ class InteriorNet(RGBDDataset):
         from tqdm import tqdm
         print("Building InteriorNet dataset")
 
-        scene_info = {'images': [], 'poses': [], 'intrinsics': [], 'angles': []}
+        scene_info = {'images': [], 'poses': [], 'intrinsics': []}
         base_pose = np.array([0,0,0,0,0,0,1])
         
         if valid:
@@ -145,8 +117,6 @@ class InteriorNet(RGBDDataset):
 
             # compute rotation matrix
             gt_rmat = self.compute_gt_rmat(torch.tensor([[x1]]), torch.tensor([[y1]]), torch.tensor([[x2]]), torch.tensor([[y2]]), 1)
-            angle_x, angle_y, angle_z = self.compute_euler_angles_from_rotation_matrices(gt_rmat)
-            angles = np.array([angle_x.item(), angle_y.item(), angle_z.item()])
 
             # get quaternions from rotation matrix
             r = R.from_matrix(gt_rmat)
@@ -161,7 +131,6 @@ class InteriorNet(RGBDDataset):
             scene_info['images'].append(images)
             scene_info['poses'] += [poses]
             scene_info['intrinsics'] += [intrinsics] 
-            scene_info['angles'] += [angles]   
 
         return scene_info
 
