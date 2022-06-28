@@ -157,6 +157,4 @@ def build_model_with_cfg(
     model = model_cls(**kwargs) if model_cfg is None else model_cls(cfg=model_cfg, **kwargs)
     model.default_cfg = default_cfg
 
-    #print('vit config:', default_cfg) if model_cfg is None else print('vit config:', model_cfg)
-
     return model

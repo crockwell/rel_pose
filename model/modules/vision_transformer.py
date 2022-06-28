@@ -158,8 +158,8 @@ def get_positional_encodings(B, N, intrinsics=None):
     return positional
 
 class CrossAttention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., \
-                proj_drop=0., cross_features=False, get_attn_scores=False,
+    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., 
+                proj_drop=0., cross_features=False, 
                 use_single_softmax=False, 
                 no_pos_encoding=False, noess=False, l1_pos_encoding=False):
         super().__init__()
@@ -174,7 +174,6 @@ class CrossAttention(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
 
         self.cross_features = cross_features
-        self.get_attn_scores = get_attn_scores
         self.attn_shift = attn_shift
         self.use_single_softmax = use_single_softmax
         self.no_pos_encoding = no_pos_encoding
@@ -222,7 +221,9 @@ class CrossAttention(nn.Module):
             fundamental_2 = self.proj_fundamental(fundamental_2)
             fundamental_1 = self.proj_fundamental(fundamental_1)
 
-            return fundamental_2, fundamental_1, attn_fundamental_2, attn_fundamental_1
+            # we flip these: we want x1 to be (q1 @ k2) @ v2
+            # impl is similar to ViLBERT
+            return fundamental_2, fundamental_1
         else:
             # q2, k1, v1
             attn_1 = (q2 @ k1.transpose(-2, -1)) * self.scale
@@ -238,29 +239,28 @@ class CrossAttention(nn.Module):
 
             x2 = (attn_2 @ v2).transpose(1, 2).reshape(B, N, C)
             
-        x1 = self.proj(x1)
-        x2 = self.proj(x2)
+            x1 = self.proj(x1)
+            x2 = self.proj(x2)
 
-        x1 = self.proj_drop(x1)
-        x2 = self.proj_drop(x2)
+            x1 = self.proj_drop(x1)
+            x2 = self.proj_drop(x2)
 
-        # we flip these: we want x1 to be (q1 @ k2) @ v2
-        # impl is similar to ViLBERT
-        return x2, x1 
+            # we flip these: we want x1 to be (q1 @ k2) @ v2
+            # impl is similar to ViLBERT
+            return x2, x1 
 
 
 class CrossBlock(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, \
+                 drop_path=0., act_layer=nn.GELU, 
                  norm_layer=nn.LayerNorm, cross_features=False,
-                 get_attn_scores=False, 
                  use_single_softmax=False, 
                  no_pos_encoding=False, noess=False, l1_pos_encoding=False):
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.cross_attn = CrossAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, \
-                                attn_drop=attn_drop, proj_drop=drop, \
-                                cross_features=cross_features,get_attn_scores=get_attn_scores,
+        self.cross_attn = CrossAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias,
+                                attn_drop=attn_drop, proj_drop=drop,
+                                cross_features=cross_features, 
                                 use_single_softmax=use_single_softmax, 
                                 no_pos_encoding=no_pos_encoding, noess=noess, l1_pos_encoding=l1_pos_encoding)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
@@ -268,7 +268,6 @@ class CrossBlock(nn.Module):
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-        self.get_attn_scores = get_attn_scores
         self.noess = noess
 
     def forward(self, x, camera=None, intrinsics=None):
@@ -278,15 +277,10 @@ class CrossBlock(nn.Module):
         x2_in = x[:,1]
 
         if not self.noess:
-            fundamental1, fundamental2, attn_1, attn_2 = self.cross_attn(self.norm1(x1_in), self.norm1(x2_in), camera, intrinsics=intrinsics)
+            fundamental1, fundamental2 = self.cross_attn(self.norm1(x1_in), self.norm1(x2_in), camera, intrinsics=intrinsics)
             fundamental_inter = torch.cat([fundamental1.unsqueeze(1), fundamental2.unsqueeze(1)], dim=1)
             fundamental = fundamental_inter.reshape(b_s, -1, nf)
             fundamental = fundamental + self.drop_path(self.mlp(self.norm2(fundamental)))
-
-            if self.get_attn_scores:
-                attn = torch.cat([attn_1.unsqueeze(1), attn_2.unsqueeze(1)], dim=1)
-                return fundamental, attn
-
             return fundamental
         else:
             x1, x2 = self.cross_attn(self.norm1(x1_in), self.norm1(x2_in), camera, intrinsics=intrinsics)
@@ -294,15 +288,12 @@ class CrossBlock(nn.Module):
             x_inter = x_inter.reshape(b_s, h_w, nf)
             x = x.reshape(b_s, h_w, nf)
             x = x + self.drop_path(x_inter)
-
             x = x + self.drop_path(self.mlp(self.norm2(x)))
-
             return x
 
 
 class Attention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., \
-                proj_drop=0.):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
         super().__init__()
         dim_in = dim
 
@@ -336,8 +327,7 @@ class Block(nn.Module):
                  drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, \
-                        attn_drop=attn_drop, proj_drop=drop)
+        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
@@ -365,10 +355,8 @@ class VisionTransformer(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=True, representation_size=None, distilled=False,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0., embed_layer=PatchEmbed, norm_layer=None,
-                 act_layer=None, weight_init='', cross_attn=[], cross_features=False,
-                 get_attn_scores=False, use_single_softmax=False, 
-                 no_pos_encoding=False,
-                 noess=False, l1_pos_encoding=False):
+                 act_layer=None, weight_init='', cross_features=False,
+                 use_single_softmax=False, no_pos_encoding=False, noess=False, l1_pos_encoding=False):
         """
         Args:
             img_size (int, tuple): input image size
@@ -408,12 +396,11 @@ class VisionTransformer(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
         block_list = []
         for i in range(depth):
-            if i in cross_attn:
+            if i == depth - 1:
                 this_block = CrossBlock(dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, 
                             qkv_bias=qkv_bias, drop=drop_rate, attn_drop=attn_drop_rate, 
                             drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer, 
                             cross_features=cross_features,
-                            get_attn_scores=get_attn_scores,
                             use_single_softmax=use_single_softmax, 
                             no_pos_encoding=no_pos_encoding,
                             noess=noess, l1_pos_encoding=l1_pos_encoding)
@@ -424,8 +411,6 @@ class VisionTransformer(nn.Module):
             block_list.append(this_block)
         self.blocks = nn.Sequential(*block_list)
         self.norm = norm_layer(embed_dim)
-
-        self.use_fundamental = len(cross_attn) > 0
 
         # Representation layer
         if representation_size and not distilled:
@@ -469,50 +454,6 @@ class VisionTransformer(nn.Module):
     @torch.jit.ignore
     def no_weight_decay(self):
         return {'pos_embed', 'cls_token', 'dist_token'}
-
-    def get_classifier(self):
-        if self.dist_token is None:
-            return self.head
-        else:
-            return self.head, self.head_dist
-
-    def reset_classifier(self, num_classes, global_pool=''):
-        self.num_classes = num_classes
-        self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
-        if self.num_tokens == 2:
-            self.head_dist = nn.Linear(self.embed_dim, self.num_classes) if num_classes > 0 else nn.Identity()
-
-    def forward_features(self, x):
-        x = self.patch_embed(x)
-        cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
-        if self.dist_token is None:
-            x = torch.cat((cls_token, x), dim=1)
-        else:
-            x = torch.cat((cls_token, self.dist_token.expand(x.shape[0], -1, -1), x), dim=1)
-        x = self.pos_drop(x + self.pos_embed)
-        if self.use_fundamental:
-            _, x = self.blocks(x)
-        else:
-            x = self.blocks(x)
-        x = self.norm(x)
-        if self.dist_token is None:
-            return self.pre_logits(x[:, 0])
-        else:
-            return x[:, 0], x[:, 1]
-
-    def forward(self, x):
-        x = self.forward_features(x)
-        if self.head_dist is not None:
-            x, x_dist = self.head(x[0]), self.head_dist(x[1])  # x must be a tuple
-            if self.training and not torch.jit.is_scripting():
-                # during inference, return the average of both classifier predictions
-                return x, x_dist
-            else:
-                return (x + x_dist) / 2
-        else:
-            x = self.head(x)
-        return x
-
 
 def _init_vit_weights(module: nn.Module, name: str = '', head_bias: float = 0., jax_impl: bool = False):
     """ ViT weight initialization
@@ -582,9 +523,6 @@ def _cfg(url='', **kwargs):
     }
 
 default_cfgs = {
-    'vit_tiny_patch16_224': _cfg(
-        url='https://storage.googleapis.com/vit_models/augreg/'
-            'Ti_16-i21k-300ep-lr_0.001-aug_none-wd_0.03-do_0.0-sd_0.0--imagenet2012-steps_20k-lr_0.03-res_224.npz'),
     'vit_tiny_patch16_384': _cfg(
         url='https://storage.googleapis.com/vit_models/augreg/'
             'Ti_16-i21k-300ep-lr_0.001-aug_none-wd_0.03-do_0.0-sd_0.0--imagenet2012-steps_20k-lr_0.03-res_384.npz',

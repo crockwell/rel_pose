@@ -152,7 +152,7 @@ def train(gpu, args):
 
                 if not is_training:
                     with torch.no_grad():
-                        poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics)
+                        poses_est = model(images, Gs, intrinsics=intrinsics)
                         
                         if args.use_fixed_geodesic:
                             geo_loss_tr, geo_loss_rot, rotation_mag, geo_metrics = fixed_geodesic_loss(Ps_out, poses_est, train_val=train_val)
@@ -160,7 +160,7 @@ def train(gpu, args):
                             geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = geodesic_loss(Ps_out, poses_est, \
                                     graph, do_scale=False, train_val=train_val, gamma=args.gamma)
                 else:
-                    poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics)
+                    poses_est = model(images, Gs, intrinsics=intrinsics)
                     if args.use_fixed_geodesic:
                         geo_loss_tr, geo_loss_rot, rotation_mag, geo_metrics = fixed_geodesic_loss(Ps_out, poses_est, train_val=train_val)
                     else:
@@ -224,6 +224,8 @@ def train(gpu, args):
 if __name__ == '__main__':
     # TODO: get rid of gamma
     # make sure our 1k on streetlearn are correct 1k. 
+    # is vit not using x = self.fusion_transformer.norm(x) after all blocks before pooling? Is this needed?
+    # I think self.total_num_features needs to be 192 in all cases (no ess, ess, cnn). check forward pass and make sure results correct.
     # turn off validation for interniornet & streetlearn
     # use_fixed_intrinsics inconsistency on some experiments? get rid of it.
     # get rid of absolute paths
@@ -239,6 +241,11 @@ if __name__ == '__main__':
     # on matterport, we scale depths to balance rot & trans loss
     # DEPTH_SCALE = 5.0
     # careful on reshape size
+    # confirm this line is ok nn.init.xavier_uniform_(self.fusion_transformer.pos_embed) # TODO: change!
+    # confirm this line is ok             x = self.fusion_transformer.patch_embed(x)
+    # clean up bottom of page ViT stuff -- we don't actually need classification head and stuff, right?
+
+    # vit helpers make sure was as-is
 
     # debugging:
     #os.environ["NCCL_BLOCKING_WAIT"] = "1"
@@ -288,7 +295,6 @@ if __name__ == '__main__':
     parser.add_argument('--use_single_softmax', action='store_true')  
     parser.add_argument('--l1_pos_encoding', action='store_true')
     parser.add_argument('--fusion_transformer', action="store_true", default=False)
-    parser.add_argument('--cross_attn', nargs='+', type=int, help='indices for cross-attention, if using cross_image transformer connectivity')
     parser.add_argument('--fc_hidden_size', type=int, default=512)
     parser.add_argument('--pool_size', type=int, default=60)
     parser.add_argument('--transformer_depth', type=int, default=6)

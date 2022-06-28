@@ -155,7 +155,6 @@ if __name__ == '__main__':
     parser.add_argument('--use_single_softmax', action='store_true')  
     parser.add_argument('--l1_pos_encoding', action='store_true')
     parser.add_argument('--fusion_transformer', action="store_true", default=False)
-    parser.add_argument('--cross_attn', nargs='+', type=int, help='indices for cross-attention, if using cross_image transformer connectivity')
     parser.add_argument('--fc_hidden_size', type=int, default=512)
     parser.add_argument('--pool_size', type=int, default=60)
     parser.add_argument('--transformer_depth', type=int, default=6)
@@ -251,7 +250,7 @@ if __name__ == '__main__':
             graph[ll] = [j for j in range(N) if ll!=j and abs(ll-j) <= 2]
                     
         with torch.no_grad():
-            poses_est, poses_est_mtx = model(images, Gs, intrinsics=intrinsics)
+            poses_est = model(images, Gs, intrinsics=intrinsics)
             geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = losses.geodesic_loss(Ps, poses_est, \
                     graph, do_scale=False, train_val=train_val, gamma=args.gamma)
             preds = poses_est[0][0][1].data.cpu().numpy()
