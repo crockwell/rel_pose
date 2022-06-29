@@ -5,7 +5,7 @@
 [Project Website](https://crockwell.github.io/rel_pose/) | [Paper](https://crockwell.github.io/rel_pose/data/paper.pdf) |
 [Supplemental](https://crockwell.github.io/rel_pose/data/supp.pdf)
 
-<img src="teaser.png" alt="drawing">
+<img src="teaser.png" alt="drawing" width="70%">
 
 ## Overview
 We propose three small modifications to a ViT via the Essential Matrix Module, enabling computations similar to the
