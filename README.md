@@ -24,9 +24,9 @@ unzip pretrained_models.zip
 ```
 Demo script to predict pose on arbitrary image:
 ```
-python demo.py --img demo/matterport.png --ckpt pretrained_models/matterport.pth
-python demo.py --img demo/interiornet_t.png --ckpt pretrained_models/interiornet_t.pth
-python demo.py --img demo/streetlearn_t.png --ckpt pretrained_models/streetlearn_t.pth
+python demo.py --imgs demo/matterport --ckpt pretrained_models/matterport.pth
+python demo.py --img demo/interiornet_t --ckpt pretrained_models/interiornet_t.pth
+python demo.py --img demo/streetlearn_t --ckpt pretrained_models/streetlearn_t.pth
 ```
 
 ## Evaluation
