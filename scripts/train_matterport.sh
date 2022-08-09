@@ -1,7 +1,7 @@
 #!/bin/bash
 sh scripts/export_paths.sh
 
-EXPNAME=matterport_emm
+EXPNAME=matterport
 POOL_SIZE=60
 WEIGHTS=120000.pth
 

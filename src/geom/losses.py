@@ -2,10 +2,22 @@ from collections import OrderedDict
 import numpy as np
 import torch
 from lietorch import SO3, SE3, Sim3
-from .graph_utils import graph_to_edge_list
 import math
 from scipy.spatial.transform import Rotation as R
 import torch.nn as nn
+
+def graph_to_edge_list(graph):
+    ii, jj, kk = [], [], []
+    for s, u in enumerate(graph):
+        for v in graph[u]:
+            ii.append(u)
+            jj.append(v)
+            kk.append(s)
+
+    ii = torch.as_tensor(ii)
+    jj = torch.as_tensor(jj)
+    kk = torch.as_tensor(kk)
+    return ii, jj, kk
 
 def pose_metrics(dE):
     """ Translation/Rotation/Scaling metrics from Sim3 """

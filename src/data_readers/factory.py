@@ -10,7 +10,9 @@ def dataset_factory(dataset_list, **kwargs):
     from torch.utils.data import ConcatDataset
 
     dataset_map = { 'matterport': (Matterport, ), 
-                    'streetlearn': (StreetLearn, ), 'interiornet': (InteriorNet, ) }
+                    'streetlearn': (StreetLearn, ), 
+                    'interiornet': (InteriorNet, ) 
+    }
     db_list = []
     for key in dataset_list:
         # cache datasets for faster future loading

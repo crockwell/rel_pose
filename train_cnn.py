@@ -4,15 +4,15 @@ from collections import OrderedDict
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from data_readers.factory import dataset_factory
+from src.data_readers.factory import dataset_factory
 
 import lietorch
 from lietorch import SE3
-from geom.losses import geodesic_loss, fixed_geodesic_loss
+from src.geom.losses import geodesic_loss, fixed_geodesic_loss
 
 # network
-from model import ViTEss
-from logger import Logger
+from src.model import ViTEss
+from src.logger import Logger
 
 # DDP training
 import torch.multiprocessing as mp
@@ -223,6 +223,7 @@ def train(gpu, args):
 
 if __name__ == '__main__':
     # TODO: get rid of gamma
+    # careful - should have no val set for SL / IN, right?
     # make sure our 1k on streetlearn are correct 1k. 
     # is vit not using x = self.fusion_transformer.norm(x) after all blocks before pooling? Is this needed?
     # I think self.total_num_features needs to be 192 in all cases (no ess, ess, cnn). check forward pass and make sure results correct.
@@ -280,13 +281,11 @@ if __name__ == '__main__':
     parser.add_argument('--name', default='bla', help='name your experiment')
     # data
     parser.add_argument("--datapath")
-    parser.add_argument("--weights")
     parser.add_argument("--image_size", default=[384,512])
     parser.add_argument("--exp")
-    parser.add_argument("--checkpoint_dir")
     parser.add_argument('--gamma', type=float, default=0.9)    
     parser.add_argument('--use_mini_dataset', action='store_true')
-    parser.add_argument('--streetlearn_interiornet_type', default='', choices=('',"nooverlap","T",'nooverlapT'))
+    parser.add_argument('--streetlearn_interiornet_type', default='', choices=('',"T"))
     parser.add_argument('--dataset', default='matterport', choices=("matterport", "interiornet", 'streetlearn'))
 
     # model

@@ -15,9 +15,7 @@ import torchvision.models as models
 import torch.nn as nn
 import torch.nn.functional as F
 
-from geom import projective_ops, losses
-
-from model import ViTEss
+from src.model import ViTEss
 from collections import OrderedDict
 import pickle
 
@@ -59,11 +57,11 @@ def eval_camera(predictions):
     gt_mags = {"tran": np.linalg.norm(gt_tran, axis=1), "rot": 2 * np.arccos(gt_rot[:,0]) * 180 / np.pi}
 
     tran_graph = np.stack([gt_mags['tran'], top1_error['tran']],axis=1)
-    tran_graph_name = os.path.join('output', args.exp, output_folder, args.weights[:-4], 'tran_graph.csv')
+    tran_graph_name = os.path.join('output', args.exp, output_folder, 'gt_translation_magnitude_vs_error.csv')
     np.savetxt(tran_graph_name, tran_graph, delimiter=',', fmt='%1.5f')
 
     rot_graph = np.stack([gt_mags['rot'], top1_error['rot']],axis=1)
-    rot_graph_name = os.path.join('output', args.exp, output_folder, args.weights[:-4], 'rot_graph.csv')
+    rot_graph_name = os.path.join('output', args.exp, output_folder, 'gt_rotation_magnitude_vs_error.csv')
     np.savetxt(rot_graph_name, rot_graph, delimiter=',', fmt='%1.5f')
     
     return camera_metrics
@@ -76,7 +74,7 @@ if __name__ == '__main__':
     parser.add_argument("--weights")
     parser.add_argument("--image_size", default=[384,512])
     parser.add_argument("--exp")
-    parser.add_argument("--checkpoint_dir")
+    parser.add_argument("--ckpt")
     parser.add_argument('--gamma', type=float, default=0.9)    
 
     # model
@@ -93,59 +91,32 @@ if __name__ == '__main__':
     args = parser.parse_args()
     torch.multiprocessing.set_start_method('spawn')
 
-    from data_readers.matterport import test_split, cur_path
+    with open(osp.join(args.datapath, 'mp3d_planercnn_json/cached_set_test.json')) as f:
+        test_split = json.load(f)
 
     dset = test_split
     output_folder = 'matterport_test'
 
-    print('performing evaluation on %s set using model %s' % (output_folder, args.checkpoint_dir))
-
-    ate_list = []
-    named_ates = []   
-    geo_list_tr = []
-    named_geos_tr = []
-    geo_list_rot = []
-    named_geos_rot = []
-    rotation_mags_list = []
-    rotation_mags_gt_list = []
-    named_rotation_mags = []
-    named_rotation_mags_gt = []
-
-
-    kmeans_trans_path = '/home/cnris/vl/SparsePlanes/sparsePlane/models/kmeans_trans_32.pkl'
-    kmeans_rots_path = '/home/cnris/vl/SparsePlanes/sparsePlane/models/kmeans_rots_32.pkl'
-    assert os.path.exists(kmeans_trans_path)
-    assert os.path.exists(kmeans_rots_path)
-    with open(kmeans_trans_path, "rb") as f:
-        kmeans_trans = pickle.load(f)
-    with open(kmeans_rots_path, "rb") as f:
-        kmeans_rots = pickle.load(f)
-
-    checkpoint_dir = args.exp
-    if args.checkpoint_dir is not None:
-        checkpoint_dir = args.checkpoint_dir
+    print('performing evaluation on %s set using model %s' % (output_folder, args.ckpt))
 
     try:
-        os.makedirs(os.path.join('output', args.exp, output_folder, args.weights[:-4]))
+        os.makedirs(os.path.join('output', args.exp, output_folder))
     except:
         pass
 
-    all_geo_loss_rot, all_geo_loss_tr, all_rotation_mags, all_rotation_mags_gt = [], [], [], []
-
     model = ViTEss(args)
     state_dict = OrderedDict([
-        (k.replace("module.", ""), v) for (k, v) in torch.load(os.path.join('output', args.checkpoint_dir,'checkpoints', args.weights))['model'].items()])
+        (k.replace("module.", ""), v) for (k, v) in torch.load(args.ckpt)['model'].items()])
     model.load_state_dict(state_dict)
     model = model.cuda().eval()
     
     train_val = ''
     predictions = {'camera': {'preds': {'tran': [], 'rot': []}, 'gts': {'tran': [], 'rot': []}}}
-    metrics = {'_geo_loss_tr': [], '_geo_loss_rot': []}
 
     for i in tqdm(range(len(dset['data']))):
         images = []
         for imgnum in ['0', '1']:
-            img_name = os.path.join(cur_path, '/'.join(str(dset['data'][i][imgnum]['file_name']).split('/')[6:]))
+            img_name = os.path.join(args.datapath, '/'.join(str(dset['data'][i][imgnum]['file_name']).split('/')[6:]))
             images.append(cv2.imread(img_name))
 
         images = np.stack(images).astype(np.float32)
@@ -157,21 +128,9 @@ if __name__ == '__main__':
         intrinsics = torch.from_numpy(intrinsics).cuda()
 
         base_pose = np.array([0,0,0,0,0,0,1])
-        rel_pose = np.array(dset['data'][i]['rel_pose']['position'] + dset['data'][i]['rel_pose']['rotation'])
-        print(rel_pose)
-        import pdb; pdb.set_trace()
-        og_rel_pose = np.copy(rel_pose)
-        rel_pose[:3] /= DEPTH_SCALE
-        cprp = np.copy(rel_pose)
-        rel_pose[6] = cprp[3] # swap 3 & 6, we want W last.
-        rel_pose[3] = cprp[6]
-        if rel_pose[6] < 0:
-            rel_pose[3:] *= -1
-        poses = np.vstack([base_pose, rel_pose]).astype(np.float32)
+        poses = np.vstack([base_pose, base_pose]).astype(np.float32)
         poses = torch.from_numpy(poses).unsqueeze(0).cuda()
-        Ps = SE3(poses)
-
-        Gs = SE3.IdentityLike(Ps)
+        Gs = SE3(poses)
 
         N=2
         graph = OrderedDict()
@@ -180,12 +139,10 @@ if __name__ == '__main__':
                     
         with torch.no_grad():
             poses_est = model(images, Gs, intrinsics=intrinsics)
-            geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = losses.geodesic_loss(Ps, poses_est, \
-                    graph, do_scale=False, train_val=train_val, gamma=args.gamma)
 
         predictions['camera']['gts']['tran'].append(dset['data'][i]['rel_pose']['position'])
         gt_rotation = dset['data'][i]['rel_pose']['rotation']
-        if gt_rotation[0] < 0: # normalize quaternions to have positive "W"
+        if gt_rotation[0] < 0: # normalize quaternions to have positive "W" (equivalent)
             gt_rotation[0] *= -1
             gt_rotation[1] *= -1
             gt_rotation[2] *= -1
@@ -194,25 +151,24 @@ if __name__ == '__main__':
 
         preds = poses_est[0][0][1].data.cpu().numpy()    
         pr_copy = np.copy(preds)
+
+        # undo preprocessing we made during training, for evaluation
         preds[3] = pr_copy[6] # swap 3 & 6, we used W last; want W first in quat
         preds[6] = pr_copy[3]
-        preds[:3] = preds[:3] * DEPTH_SCALE # undo scale change we made during training
+        preds[:3] = preds[:3] * DEPTH_SCALE 
 
         predictions['camera']['preds']['tran'].append(preds[:3])
         predictions['camera']['preds']['rot'].append(preds[3:])
 
-        metrics['_geo_loss_tr'].append(geo_metrics['_geo_loss_tr'])
-        metrics['_geo_loss_rot'].append(geo_metrics['_geo_loss_rot'])
-
-    print('mean geo tr', np.mean(np.array(metrics['_geo_loss_tr'])))
-    print('mean geo rot', np.mean(np.array(metrics['_geo_loss_rot'])))
+        np.set_printoptions(suppress=True)
+        # print(preds[3:], gt_rotation)
+        # print(preds[:3], dset['data'][i]['rel_pose']['position'])
+        # import pdb; pdb.set_trace()
 
     camera_metrics = eval_camera(predictions)
     for k in camera_metrics:
         print(k, camera_metrics[k])
     
-    with open(os.path.join('output', args.exp, output_folder, args.weights[:-4], 'results.txt'), 'w') as f:
-        print('mean geo tr', np.mean(np.array(metrics['_geo_loss_tr'])), file=f)
-        print('mean geo rot', np.mean(np.array(metrics['_geo_loss_rot'])), file=f)
+    with open(os.path.join('output', args.exp, output_folder, 'results.txt'), 'w') as f:
         for k in camera_metrics:
             print(k, camera_metrics[k], file=f)

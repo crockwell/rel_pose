@@ -4,8 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 
-from modules.extractor import ResidualBlock
-from modules.vision_transformer import _create_vision_transformer
+from .modules.extractor import ResidualBlock
+from .modules.vision_transformer import _create_vision_transformer
 from lietorch import SE3
 
 class ViTEss(nn.Module):
@@ -21,7 +21,7 @@ class ViTEss(nn.Module):
         self.num_images = 2
         self.pose_size = 7
         self.num_patches = self.feature_resolution[0] * self.feature_resolution[1]
-        extractor_final_conv_kernel_size = max(1, 28-args.feature_resolution+1)
+        extractor_final_conv_kernel_size = max(1, 28-self.feature_resolution[0]+1)
         self.pool_feat1 = min(96, 4 * args.pool_size)
         self.pool_feat2 = args.pool_size
         self.H2 = args.fc_hidden_size
@@ -50,7 +50,7 @@ class ViTEss(nn.Module):
             self.fusion_transformer.cls_token = None
             self.pos_encoding = None
 
-            self.fusion_transformer.pos_embed = nn.Parameter(torch.zeros([1,num_patches,self.total_num_features])) 
+            self.fusion_transformer.pos_embed = nn.Parameter(torch.zeros([1,self.num_patches,self.total_num_features])) 
             nn.init.xavier_uniform_(self.fusion_transformer.pos_embed) # TODO: change!
 
             pos_enc = 6
@@ -137,7 +137,7 @@ class ViTEss(nn.Module):
 
         return features, intrinsics
     
-    def normalize_preds(self, Gs, pose_preds):
+    def normalize_preds(self, Gs, pose_preds, inference):
         pred_out_Gs = SE3(pose_preds)
         
         normalized = pred_out_Gs.data[:,:,3:].norm(dim=-1).unsqueeze(2)
@@ -149,7 +149,7 @@ class ViTEss(nn.Module):
         if inference:
             out_Gs = these_out_Gs.data[0].cpu().numpy()
         else:
-            out_Gs.append(these_out_Gs)
+            out_Gs = [these_out_Gs]
 
         return out_Gs
 
@@ -162,13 +162,15 @@ class ViTEss(nn.Module):
         B, _, _, _, _ = images.shape
 
         if self.fusion_transformer is not None:
-            x = features[:,:,:self.embed_dim]
+            x = features[:,:,:self.total_num_features]
             x = self.fusion_transformer.patch_embed(x)
             x = x + self.fusion_transformer.pos_embed
             x = self.fusion_transformer.pos_drop(x)
 
             for layer in range(self.transformer_depth):
                 x = self.fusion_transformer.blocks[layer](x, intrinsics=intrinsics)
+
+            features = self.fusion_transformer.norm(x)
         else:
             reshaped_features = features.reshape([-1,self.feature_resolution[0],self.feature_resolution[1],self.total_num_features])
             features = self.pool_output(reshaped_features.permute(0,3,1,2))
@@ -181,4 +183,4 @@ class ViTEss(nn.Module):
         else:
             pose_preds = self.pose_regressor(features.reshape([B, -1]))
         
-        return self.normalize_preds(Gs, pose_preds)
+        return self.normalize_preds(Gs, pose_preds, inference)

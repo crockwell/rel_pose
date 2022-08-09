@@ -12,14 +12,6 @@ import json
 
 from scipy.spatial.transform import Rotation as R
 
-cur_path = '/home/cnris/vl/ExtremeRotation_code/'
-
-test_split = np.load(osp.join(cur_path, 'metadata/interiornet/test_pair_rotation.npy'), allow_pickle=True)
-test_split = np.array(test_split, ndmin=1)[0]
-
-test_split_T = np.load(osp.join(cur_path, 'metadata/interiornetT/test_pair_translation.npy'), allow_pickle=True)
-test_split_T = np.array(test_split_T, ndmin=1)[0]
-
 class InteriorNet(RGBDDataset):
 
     def __init__(self, mode='training', **kwargs):
@@ -56,6 +48,7 @@ class InteriorNet(RGBDDataset):
         gt_rmat_matrix = self.compute_rotation_matrix_from_two_matrices(gt_mtx2, gt_mtx1).view(batch_size, 3, 3)
         return gt_rmat_matrix    
 
+
     def _build_dataset(self, subepoch):
         valid = (subepoch==10)
 
@@ -67,26 +60,19 @@ class InteriorNet(RGBDDataset):
         base_pose = np.array([0,0,0,0,0,0,1])
         
         if valid:
-            if self.streetlearn_interiornet_type == '' or \
-               self.streetlearn_interiornet_type == 'nooverlap':
+            if self.streetlearn_interiornet_type == '':
                 path = 'metadata/interiornet/test_pair_rotation.npy'
             else:
                 path = 'metadata/interiornetT/test_pair_translation.npy'
         else:
             if self.streetlearn_interiornet_type == '':
                 path = 'metadata/interiornet/train_pair_rotation_overlap.npy'
-                print('training with no translation and only overlapping images')
-            elif self.streetlearn_interiornet_type == 'nooverlap':
-                path = 'metadata/interiornet/train_pair_rotation.npy'
-                print('training with no translation and include non-overlapping images')
-            elif self.streetlearn_interiornet_type == 'T':
+                print('training with no translation')
+            else:
                 path = 'metadata/interiornetT/train_pair_translation_overlap.npy'
-                print('training with translation but only overlapping images')
-            elif self.streetlearn_interiornet_type == 'nooverlapT':
-                path = 'metadata/interiornetT/train_pair_translation.npy'
-                print('training with translation and include non-overlapping images')
+                print('training with translation')
 
-        split = np.load(osp.join(cur_path, path), allow_pickle=True)
+        split = np.load(osp.join(self.root, path), allow_pickle=True)
         split = np.array(split, ndmin=1)[0]
 
         if not valid:
@@ -100,7 +86,7 @@ class InteriorNet(RGBDDataset):
                 end = 32000
         else:
             start = 0
-            end = 9999999
+            end = np.inf
             if self.use_mini_dataset:
                 start = 0
                 end = 5000
@@ -109,8 +95,8 @@ class InteriorNet(RGBDDataset):
             if i < start or i >= end:
                 continue
 
-            images = [os.path.join(cur_path, 'data', 'interiornet', split[i]['img1']['path']),
-                        os.path.join(cur_path, 'data', 'interiornet', split[i]['img2']['path'])]
+            images = [os.path.join(self.root, 'data', 'interiornet', split[i]['img1']['path']),
+                        os.path.join(self.root, 'data', 'interiornet', split[i]['img2']['path'])]
             
             x1, y1 = split[i]['img1']['x'], split[i]['img1']['y']
             x2, y2 = split[i]['img2']['x'], split[i]['img2']['y']

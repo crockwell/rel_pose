@@ -1,12 +1,16 @@
 #!/bin/bash
 sh scripts/export_paths.sh
 
-EXPNAME=interiornet_t_emm
-POOL_SIZE=60
-WEIGHTS=120000.pth
+# TRAINED
+# CKPT=output/interiornet_t/checkpoints/120000.pth
 
-nice -n 19 python test_streetlearn_interiornet.py --exp ${EXPNAME} --disable_vis \
-        --fusion_transformer --checkpoint_dir ${EXPNAME} --weights ${WEIGHTS} \
-        --plot_curve --transformer_depth 6 \
-        --datapath=$INTERIORNET_PATH --dataset interiornet --streetlearn_interiornet_type T 
+# PRETRAINED
+CKPT=pretrained_models/interiornet_t.pth
+
+EXPNAME=interiornet_t
+POOL_SIZE=60
+
+nice -n 19 python test_streetlearn_interiornet.py --exp ${EXPNAME} --transformer_depth 6 \
+        --fusion_transformer --ckpt $CKPT \
+        --datapath=$INTERIORNET_STREETLEARN_PATH --dataset interiornet --streetlearn_interiornet_type T 
         

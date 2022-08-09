@@ -171,10 +171,11 @@ class CrossAttention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         if noess:
             self.proj = nn.Linear(dim, dim)
+        else:
+            self.proj_fundamental = nn.Linear(dim+int(6*self.num_heads), dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
         self.cross_features = cross_features
-        self.attn_shift = attn_shift
         self.use_single_softmax = use_single_softmax
         self.no_pos_encoding = no_pos_encoding
         self.noess = noess
@@ -192,6 +193,13 @@ class CrossAttention(nn.Module):
         if not self.noess:
             attn_1 = (q2 @ k1.transpose(-2, -1)) * self.scale
             attn_2 = (q1 @ k2.transpose(-2, -1)) * self.scale
+
+            if self.use_single_softmax:
+                attn_fundamental_1 = attn_1.softmax(dim=-1)
+                attn_fundamental_2 = attn_2.softmax(dim=-1)
+            else:
+                attn_fundamental_1 = attn_1.softmax(dim=-1) * attn_1.softmax(dim=-2)
+                attn_fundamental_2 = attn_2.softmax(dim=-1) * attn_2.softmax(dim=-2)
 
             if self.l1_pos_encoding:
                 positional = get_l1_positional_encodings(B, N, intrinsics=intrinsics).cuda() # shape B,N,6
@@ -307,7 +315,7 @@ class Attention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
 
     def forward(self, x, camera=None, intrinsics=None):
-        _, _, C = x.shape
+        B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
         attn = (q @ k.transpose(-2, -1)) * self.scale

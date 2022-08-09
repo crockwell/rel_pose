@@ -15,7 +15,7 @@ import torchvision.models as models
 import torch.nn as nn
 import torch.nn.functional as F
 
-from geom import projective_ops, losses
+from geom import losses
 
 from model import ViTEss
 from collections import OrderedDict

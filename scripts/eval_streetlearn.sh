@@ -1,11 +1,16 @@
 #!/bin/bash
 sh scripts/export_paths.sh
 
-EXPNAME=streetlearn_emm
+# TRAINED
+# CKPT=output/streetlearn/checkpoints/120000.pth
+
+# PRETRAINED
+CKPT=pretrained_models/streetlearn.pth
+
+EXPNAME=streetlearn
 POOL_SIZE=60
 WEIGHTS=120000.pth
 
-nice -n 19 python test_streetlearn_interiornet.py --exp ${EXPNAME} --disable_vis \
-        --fusion_transformer --checkpoint_dir ${EXPNAME} --weights ${WEIGHTS} \
-        --plot_curve --transformer_depth 6 \
-        --datapath=$INTERIORNET_PATH --dataset streetlearn
+nice -n 19 python test_streetlearn_interiornet.py --exp ${EXPNAME} --transformer_depth 6 \
+        --fusion_transformer --ckpt $CKPT \
+        --datapath=$INTERIORNET_STREETLEARN_PATH --dataset streetlearn

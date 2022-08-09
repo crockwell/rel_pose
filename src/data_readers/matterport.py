@@ -11,11 +11,6 @@ from lietorch import SE3
 from .base import RGBDDataset
 import json
 
-cur_path = '/home/cnris/data/mp3d_rpnet_v4_sep20'
-
-with open(osp.join(cur_path, 'mp3d_planercnn_json/cached_set_test.json')) as f:
-    test_split = json.load(f)
-
 class Matterport(RGBDDataset):
 
     # scale depths to balance rot & trans
@@ -23,15 +18,6 @@ class Matterport(RGBDDataset):
 
     def __init__(self, mode='training', **kwargs):
         self.mode = mode
-
-        kmeans_trans_path = '/home/cnris/vl/SparsePlanes/sparsePlane/models/kmeans_trans_32.pkl'
-        kmeans_rots_path = '/home/cnris/vl/SparsePlanes/sparsePlane/models/kmeans_rots_32.pkl'
-        assert os.path.exists(kmeans_trans_path)
-        assert os.path.exists(kmeans_rots_path)
-        with open(kmeans_trans_path, "rb") as f:
-            self.kmeans_trans = pickle.load(f)
-        with open(kmeans_rots_path, "rb") as f:
-            self.kmeans_rots = pickle.load(f)
 
         super(Matterport, self).__init__(name='Matterport', **kwargs)
 
@@ -46,13 +32,13 @@ class Matterport(RGBDDataset):
         path = 'cached_set_train.json'
         if valid:
             path = 'cached_set_val.json'
-        with open(osp.join(cur_path, 'mp3d_planercnn_json', path)) as f:
+        with open(osp.join(self.root, 'mp3d_planercnn_json', path)) as f:
             split = json.load(f)
 
         for i in range(len(split['data'])):
             images = []
             for imgnum in ['0', '1']:
-                img_name = os.path.join(cur_path, '/'.join(str(split['data'][i][imgnum]['file_name']).split('/')[6:]))
+                img_name = os.path.join(self.root, '/'.join(str(split['data'][i][imgnum]['file_name']).split('/')[6:]))
                 images.append(img_name)
             
             rel_pose = np.array(split['data'][i]['rel_pose']['position'] + split['data'][i]['rel_pose']['rotation'])

@@ -15,9 +15,7 @@ import torchvision.models as models
 import torch.nn as nn
 import torch.nn.functional as F
 
-from geom import projective_ops, losses
-
-from model import ViTEss
+from src.model import ViTEss
 from collections import OrderedDict
 import pickle
 from scipy.spatial.transform import Rotation as R
@@ -75,7 +73,6 @@ def evaluation_metric_rotation(predict_rotation, gt_rotation, save_folder):
                                                                 gt_rotation.view(-1, 3, 3)) / np.pi * 180
     gt_distance = compute_angle_from_r_matrices(gt_rotation.view(-1, 3, 3))
 
-    geodesic_loss_overlap_none = geodesic_loss[gt_distance.view(-1) > (np.pi / 2)]
     geodesic_loss_overlap_large = geodesic_loss[gt_distance.view(-1) < (np.pi / 4)]
     geodesic_loss_overlap_small = geodesic_loss[(gt_distance.view(-1) >= np.pi / 4) & (gt_distance.view(-1) < np.pi / 2)]
 
@@ -91,11 +88,8 @@ def evaluation_metric_rotation(predict_rotation, gt_rotation, save_folder):
     np.savetxt(all_rotation_mags_gt_name, all_rotation_mags_gt, delimiter=',', fmt='%1.5f')
 
     res_error = {
-        "gt_angle": gt_distance / np.pi * 180,
         "rotation_geodesic_error_overlap_large": geodesic_loss_overlap_large,
         "rotation_geodesic_error_overlap_small": geodesic_loss_overlap_small,
-        "rotation_geodesic_error_overlap_none": geodesic_loss_overlap_none,
-        "rotation_geodesic_error": geodesic_loss,
     }
     return res_error
 
@@ -113,20 +107,17 @@ def eval_camera(predictions, save_folder):
     res_error = evaluation_metric_rotation(torch.from_numpy(r_pred).cuda(), torch.from_numpy(r_gt).cuda(), save_folder)
 
     all_res = {}
-    # mean, median, max, std, 10deg
+    # mean, median, 10deg
     for k, v in res_error.items():
         v = v.view(-1).detach().cpu().numpy()
-        if k == "gt_angle" or v.size == 0:
+        if v.size == 0:
             continue
         mean = np.mean(v)
         median = np.median(v)
-        error_max = np.max(v)
-        std = np.std(v)
         count_10 = (v <= 10).sum(axis=0)
         percent_10 = np.true_divide(count_10, v.shape[0])
-        all_res.update({k + '/mean': mean, k + '/median': median, k + '/max': error_max, k + '/std': std,
-                        k + '/10deg': percent_10})
-    print("Results:", all_res)
+        all_res.update({k + '/mean': mean, k + '/median': median, k + '/10deg': percent_10})
+
     return all_res
 
 def compute_gt_rmat(rotation_x1, rotation_y1, rotation_x2, rotation_y2, batch_size):
@@ -143,7 +134,7 @@ if __name__ == '__main__':
     parser.add_argument("--weights")
     parser.add_argument("--image_size", default=[384,512])
     parser.add_argument("--exp")
-    parser.add_argument("--checkpoint_dir")
+    parser.add_argument("--ckpt")
     parser.add_argument('--dataset', default='interiornet', choices=("interiornet", 'streetlearn'))
     parser.add_argument('--gamma', type=float, default=0.9)    
     parser.add_argument('--streetlearn_interiornet_type', default='', choices=('',"nooverlap","T",'nooverlapT'))
@@ -165,57 +156,45 @@ if __name__ == '__main__':
 
     if args.dataset == 'interiornet':
         if args.streetlearn_interiornet_type == 'T':
-            from data_readers.interiornet import test_split_T, cur_path
+            dset = np.load(osp.join(args.datapath, 'metadata/interiornetT/test_pair_translation.npy'), allow_pickle=True)
             output_folder = 'interiornetT_test'
-            dset = test_split_T
         else:
-            from data_readers.interiornet import test_split, cur_path
+            dset = np.load(osp.join(args.datapath, 'metadata/interiornet/test_pair_rotation.npy'), allow_pickle=True)
             output_folder = 'interiornet_test'
-            dset = test_split
     else:
         if args.streetlearn_interiornet_type == 'T':
-            from data_readers.streetlearn import test_split_T, cur_path
+            dset = np.load(osp.join(args.datapath, 'metadata/streetlearn/test_pair_rotation.npy'), allow_pickle=True)
             output_folder = 'streetlearnT_test'
-            dset = test_split_T
             args.dataset = 'streetlearn_2016'
         else:
-            from data_readers.streetlearn import test_split, cur_path
+            dset = np.load(osp.join(args.datapath, 'metadata/streetlearnT/test_pair_translation.npy'), allow_pickle=True)
             output_folder = 'streetlearn_test'
-            dset = test_split
 
-    print('performing evaluation on %s set using model %s' % (output_folder, args.checkpoint_dir))
+    dset = np.array(dset, ndmin=1)[0]
 
-    checkpoint_dir = args.exp
-    if args.checkpoint_dir is not None:
-        checkpoint_dir = args.checkpoint_dir
+    print('performing evaluation on %s set using model %s' % (output_folder, args.ckpt))
 
     try:
-        os.makedirs(os.path.join('output', args.exp, output_folder, args.weights[:-4]))
+        os.makedirs(os.path.join('output', args.exp, output_folder))
     except:
         pass
 
-    all_geo_loss_rot, all_geo_loss_tr, all_rotation_mags, all_rotation_mags_gt = [], [], [], []
-
     model = ViTEss(args)
     state_dict = OrderedDict([
-        (k.replace("module.", ""), v) for (k, v) in torch.load(os.path.join('output', args.checkpoint_dir,'checkpoints', args.weights))['model'].items()])
+        (k.replace("module.", ""), v) for (k, v) in torch.load(args.ckpt)['model'].items()])
     model.load_state_dict(state_dict)
     model = model.cuda().eval()
     
     train_val = ''
     predictions = {'camera': {'preds': {'tran': [], 'rot': []}, 'gts': {'tran': [], 'rot': []}}}
-    metrics = {'_geo_loss_tr': [], '_geo_loss_rot': []}
 
     sorted(dset.keys())
 
-    for i, dset_i in tqdm(sorted(dset.items())):
-        if args.dataset == 'interiornet':
-            if i > 999:
-                break
+    for i, dset_i in tqdm(sorted(dset.items())[:1000]):
         base_pose = np.array([0,0,0,0,0,0,1])
 
-        images = [cv2.imread(os.path.join(cur_path, 'data', args.dataset, dset[i]['img1']['path'])),
-                    cv2.imread(os.path.join(cur_path, 'data', args.dataset, dset[i]['img2']['path']))]
+        images = [cv2.imread(os.path.join(args.datapath, 'data', args.dataset, dset[i]['img1']['path'])),
+                    cv2.imread(os.path.join(args.datapath, 'data', args.dataset, dset[i]['img2']['path']))]
         
         x1, y1 = dset[i]['img1']['x'], dset[i]['img1']['y']
         x2, y2 = dset[i]['img2']['x'], dset[i]['img2']['y']
@@ -243,7 +222,6 @@ if __name__ == '__main__':
 
         Gs = SE3.IdentityLike(Ps)
 
-        # only 2 images so frame graph has no randomness
         N=2
         graph = OrderedDict()
         for ll in range(N):
@@ -251,8 +229,6 @@ if __name__ == '__main__':
                     
         with torch.no_grad():
             poses_est = model(images, Gs, intrinsics=intrinsics)
-            geo_loss_tr, geo_loss_rot, rotation_mag, rotation_mag_gt, geo_metrics = losses.geodesic_loss(Ps, poses_est, \
-                    graph, do_scale=False, train_val=train_val, gamma=args.gamma)
             preds = poses_est[0][0][1].data.cpu().numpy()
 
         predictions['camera']['gts']['tran'].append(np.array([0,0,0]))
@@ -261,20 +237,12 @@ if __name__ == '__main__':
         predictions['camera']['preds']['tran'].append(preds[:3])
         predictions['camera']['preds']['rot'].append(preds[3:])
 
-        metrics['_geo_loss_tr'].append(geo_metrics['_geo_loss_tr'])
-        metrics['_geo_loss_rot'].append(geo_metrics['_geo_loss_rot'])
-
-    print('did this many:',len(predictions['camera']['gts']['rot']))
-
-    print('mean geo tr', np.mean(np.array(metrics['_geo_loss_tr'])))
-    print('mean geo rot', np.mean(np.array(metrics['_geo_loss_rot'])))
-
-    full_output_folder = os.path.join('output', args.exp, output_folder, args.weights[:-4])
+    full_output_folder = os.path.join('output', args.exp, output_folder)
     camera_metrics = eval_camera(predictions, full_output_folder)
-    
+
+    for k in camera_metrics:
+        print(k, camera_metrics[k])
 
     with open(os.path.join(full_output_folder, 'results.txt'), 'w') as f:
-        print('mean geo tr', np.mean(np.array(metrics['_geo_loss_tr'])), file=f)
-        print('mean geo rot', np.mean(np.array(metrics['_geo_loss_rot'])), file=f)
         for k in camera_metrics:
             print(k, camera_metrics[k], file=f)
