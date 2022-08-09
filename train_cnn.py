@@ -244,6 +244,7 @@ if __name__ == '__main__':
     # confirm this line is ok nn.init.xavier_uniform_(self.fusion_transformer.pos_embed) # TODO: change!
     # confirm this line is ok             x = self.fusion_transformer.patch_embed(x)
     # clean up bottom of page ViT stuff -- we don't actually need classification head and stuff, right?
+    # careful on batch size given not using syncbn!
 
     # vit helpers make sure was as-is
 
