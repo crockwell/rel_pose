@@ -19,23 +19,29 @@ conda install environment.yml
 ```
 Download & extract pretrained models replicating paper results:
 ```
-wget https://fouheylab.eecs.umich.edu/~cnris/rel_pose/modelcheckpoints/pretrained_models.zip
+wget https://fouheylab.eecs.umich.edu/~cnris/rel_pose/modelcheckpoints/pretrained_models.zip --no-check-certificate
 unzip pretrained_models.zip
 ```
-Demo script to predict pose on arbitrary image:
+Demo script to predict pose on arbitrary image pair:
 ```
-python demo.py --imgs demo/matterport --ckpt pretrained_models/matterport.pth
-python demo.py --img demo/interiornet_t --ckpt pretrained_models/interiornet_t.pth
-python demo.py --img demo/streetlearn_t --ckpt pretrained_models/streetlearn_t.pth
+python demo.py --img1 demo/matterport_1.png --img2 demo/matterport_2.png --ckpt pretrained_models/matterport.pth
+python demo.py --img1 demo/interiornet_t_1.png --img2 demo/interiornet_t_2.png --ckpt pretrained_models/interiornet_t.pth
+python demo.py --img1 demo/streetlearn_t_1.png --img2 demo/streetlearn_t_1.png --ckpt pretrained_models/streetlearn_t.pth
 ```
 
 ## Evaluation
 
-Download and setup data following the setups of Jin et al. and Cai et al.
+Download and setup data following the steps of [Jin et al.](https://github.com/jinlinyi/SparsePlanes/blob/main/docs/data.md) (Matterport) and [Cai et al.](https://github.com/RuojinCai/ExtremeRotation_code) (InteriorNet and StreetLearn). 
+- StreetLearn and InteriorNet require rendering. See [here](https://github.com/RuojinCai/ExtremeRotation_code#dataset) for more details.
+- Matterport does not require rendering:
+```
+wget https://fouheylab.eecs.umich.edu/~jinlinyi/2021/sparsePlanesICCV21/split/mp3d_planercnn_json.zip
+wget https://fouheylab.eecs.umich.edu/~jinlinyi/2021/sparsePlanesICCV21/data/rgb.zip
+unzip mp3d_planercnn_json.zip; unzip rgb.zip
 ```
 
-```
-Evaluation scripts are as follows
+
+Evaluation scripts are as follows:
 ```
 sh scripts/eval_matterport.sh
 sh scripts/eval_interiornet.sh
