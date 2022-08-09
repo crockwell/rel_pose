@@ -32,14 +32,14 @@ python demo.py --img1 demo/streetlearn_t_1.png --img2 demo/streetlearn_t_1.png -
 ## Evaluation
 
 Download and setup data following the steps of [Jin et al.](https://github.com/jinlinyi/SparsePlanes/blob/main/docs/data.md) (Matterport) and [Cai et al.](https://github.com/RuojinCai/ExtremeRotation_code) (InteriorNet and StreetLearn). 
-- StreetLearn and InteriorNet require rendering. See [here](https://github.com/RuojinCai/ExtremeRotation_code#dataset) for more details.
+- StreetLearn and InteriorNet require rendering. See [here](https://github.com/RuojinCai/ExtremeRotation_code#dataset) for more details. You'll need to clone their repo for rendering as well as to get dataset metadata.
 - Matterport does not require rendering:
 ```
 wget https://fouheylab.eecs.umich.edu/~jinlinyi/2021/sparsePlanesICCV21/split/mp3d_planercnn_json.zip
 wget https://fouheylab.eecs.umich.edu/~jinlinyi/2021/sparsePlanesICCV21/data/rgb.zip
 unzip mp3d_planercnn_json.zip; unzip rgb.zip
 ```
-
+- You'll need to update `scripts/export_paths.sh` to root directories once datasets are setup.
 
 Evaluation scripts are as follows:
 ```
