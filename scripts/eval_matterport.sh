@@ -1,5 +1,5 @@
 #!/bin/bash
-sh scripts/export_paths.sh
+export MATTERPORT_PATH=matterport
 
 # TRAINED
 # CKPT=output/matterport/checkpoints/120000.pth

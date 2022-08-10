@@ -1,5 +1,5 @@
 #!/bin/bash
-sh scripts/export_paths.sh
+export INTERIORNET_STREETLEARN_PATH=/home/cnris/vl/ExtremeRotation_code
 
 # TRAINED
 # CKPT=output/streetlearn/checkpoints/120000.pth

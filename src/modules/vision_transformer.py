@@ -158,6 +158,10 @@ def get_positional_encodings(B, N, intrinsics=None):
     return positional
 
 class CrossAttention(nn.Module):
+    """
+    Our custom Cross-Attention Block. Have options to use dual softmax, 
+    add positional encoding and use bilinear attention
+    """
     def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., 
                 proj_drop=0., cross_features=False, 
                 use_single_softmax=False, 

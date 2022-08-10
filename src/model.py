@@ -59,7 +59,7 @@ class ViTEss(nn.Module):
             self.H = int(self.num_heads*2*(self.total_num_features//self.num_heads + pos_enc) * (self.total_num_features//self.num_heads))
         else:
             self.H = self.pool_feat2 * self.feature_resolution[0] * self.feature_resolution[1]
-            self.pool_output = nn.Sequential(
+            self.pool_transformer_output = nn.Sequential(
                 nn.Conv2d(self.total_num_features, self.pool_feat1, kernel_size=1, bias=True),
                 nn.BatchNorm2d(self.pool_feat1),
                 nn.ReLU(),
@@ -70,7 +70,7 @@ class ViTEss(nn.Module):
         if self.noess: # has 576x192 input (110592) instead of 384x384/6!
             self.H = int(self.feature_resolution[0]*self.feature_resolution[1]*43) # 43 is slightly larger than MLP size.
             self.pool_feat2 = 43
-            self.pool_output = nn.Sequential(
+            self.pool_attn = nn.Sequential(
                 nn.Conv2d(self.total_num_features*2, self.pool_feat1, kernel_size=1, bias=True),
                 nn.BatchNorm2d(self.pool_feat1),
                 nn.ReLU(),
@@ -132,7 +132,10 @@ class ViTEss(nn.Module):
         x = self.extractor_final_conv(x) # 192, 24, 24 
 
         x = x.reshape([input_images.shape[0], -1, self.num_patches])
-        features = x[:,:self.total_num_features]
+        if self.fusion_transformer is None:
+            features = x[:,:self.total_num_features//2]
+        else:
+            features = x[:,:self.total_num_features]
         features = features.permute([0,2,1])
 
         return features, intrinsics
@@ -173,12 +176,12 @@ class ViTEss(nn.Module):
             features = self.fusion_transformer.norm(x)
         else:
             reshaped_features = features.reshape([-1,self.feature_resolution[0],self.feature_resolution[1],self.total_num_features])
-            features = self.pool_output(reshaped_features.permute(0,3,1,2))
+            features = self.pool_transformer_output(reshaped_features.permute(0,3,1,2))
 
         if self.noess:
             # 12, 576, 192
             features = features.reshape([B,self.feature_resolution[0], self.feature_resolution[1],-1]).permute([0,3,1,2])
-            pooled_features = self.pool_output(features)
+            pooled_features = self.pool_attn(features)
             pose_preds = self.pose_regressor(pooled_features.reshape([B, -1]))
         else:
             pose_preds = self.pose_regressor(features.reshape([B, -1]))

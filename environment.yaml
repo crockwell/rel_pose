@@ -1,4 +1,4 @@
-name: droidenv
+name: rel_pose
 channels:
   - rusty1s
   - pytorch

@@ -18,6 +18,7 @@ import torch.nn.functional as F
 from src.model import ViTEss
 from collections import OrderedDict
 import pickle
+import json
 
 from lietorch import SE3
 
@@ -91,7 +92,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     torch.multiprocessing.set_start_method('spawn')
 
-    with open(osp.join(args.datapath, 'mp3d_planercnn_json/cached_set_test.json')) as f:
+    with open(os.path.join(args.datapath, 'mp3d_planercnn_json/cached_set_test.json')) as f:
         test_split = json.load(f)
 
     dset = test_split
@@ -118,7 +119,6 @@ if __name__ == '__main__':
         for imgnum in ['0', '1']:
             img_name = os.path.join(args.datapath, '/'.join(str(dset['data'][i][imgnum]['file_name']).split('/')[6:]))
             images.append(cv2.imread(img_name))
-
         images = np.stack(images).astype(np.float32)
         images = torch.from_numpy(images).float()
         images = images.permute(0, 3, 1, 2)

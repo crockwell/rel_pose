@@ -14,6 +14,7 @@ import torchvision
 import torchvision.models as models
 import torch.nn as nn
 import torch.nn.functional as F
+import json
 
 from src.model import ViTEss
 from collections import OrderedDict
@@ -156,18 +157,18 @@ if __name__ == '__main__':
 
     if args.dataset == 'interiornet':
         if args.streetlearn_interiornet_type == 'T':
-            dset = np.load(osp.join(args.datapath, 'metadata/interiornetT/test_pair_translation.npy'), allow_pickle=True)
+            dset = np.load(os.path.join(args.datapath, 'metadata/interiornetT/test_pair_translation.npy'), allow_pickle=True)
             output_folder = 'interiornetT_test'
         else:
-            dset = np.load(osp.join(args.datapath, 'metadata/interiornet/test_pair_rotation.npy'), allow_pickle=True)
+            dset = np.load(os.path.join(args.datapath, 'metadata/interiornet/test_pair_rotation.npy'), allow_pickle=True)
             output_folder = 'interiornet_test'
     else:
         if args.streetlearn_interiornet_type == 'T':
-            dset = np.load(osp.join(args.datapath, 'metadata/streetlearn/test_pair_rotation.npy'), allow_pickle=True)
+            dset = np.load(os.path.join(args.datapath, 'metadata/streetlearnT/test_pair_translation.npy'), allow_pickle=True)
             output_folder = 'streetlearnT_test'
             args.dataset = 'streetlearn_2016'
         else:
-            dset = np.load(osp.join(args.datapath, 'metadata/streetlearnT/test_pair_translation.npy'), allow_pickle=True)
+            dset = np.load(os.path.join(args.datapath, 'metadata/streetlearn/test_pair_rotation.npy'), allow_pickle=True)
             output_folder = 'streetlearn_test'
 
     dset = np.array(dset, ndmin=1)[0]
