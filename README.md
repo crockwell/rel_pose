@@ -26,7 +26,7 @@ Demo script to predict pose on arbitrary image pair:
 ```
 python demo.py --img1 demo/matterport_1.png --img2 demo/matterport_2.png --ckpt pretrained_models/matterport.pth
 python demo.py --img1 demo/interiornet_t_1.png --img2 demo/interiornet_t_2.png --ckpt pretrained_models/interiornet_t.pth
-python demo.py --img1 demo/streetlearn_t_1.png --img2 demo/streetlearn_t_1.png --ckpt pretrained_models/streetlearn_t.pth
+python demo.py --img1 demo/streetlearn_t_1.png --img2 demo/streetlearn_t_2.png --ckpt pretrained_models/streetlearn_t.pth
 ```
 
 ## Evaluation
