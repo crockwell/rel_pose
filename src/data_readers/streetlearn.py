@@ -50,8 +50,6 @@ class StreetLearn(RGBDDataset):
 
 
     def _build_dataset(self, subepoch):
-        valid = (subepoch==10)
-
         np.seterr(all="ignore")
         from tqdm import tqdm
         print("Building StreetLearn dataset")
@@ -61,37 +59,23 @@ class StreetLearn(RGBDDataset):
         
         dset_name = 'streetlearn'
 
-        if valid:
-            if self.streetlearn_interiornet_type == '':
-                path = 'metadata/streetlearn/test_pair_rotation.npy'
-            else:
-                path = 'metadata/streetlearnT/test_pair_translation.npy'
-                dset_name = 'streetlearn_2016'
+        if self.streetlearn_interiornet_type == '':
+            path = 'metadata/streetlearn/train_pair_rotation_overlap.npy'
+            print('training with no translation')
         else:
-            if self.streetlearn_interiornet_type == '':
-                path = 'metadata/streetlearn/train_pair_rotation_overlap.npy'
-                print('training with no translation')
-            else:
-                path = 'metadata/streetlearnT/train_pair_translation_overlap.npy'
-                print('training with translation')
-                dset_name = 'streetlearn_2016'
+            path = 'metadata/streetlearnT/train_pair_translation_overlap.npy'
+            print('training with translation')
+            dset_name = 'streetlearn_2016'
 
         split = np.load(osp.join(self.root, path), allow_pickle=True)
         split = np.array(split, ndmin=1)[0]
 
-        if not valid:
-            split_size = len(split.keys()) // 10
-            start = split_size * (subepoch)
-            end = split_size * (subepoch+1)
-            if self.use_mini_dataset:
-                start = 0
-                end = 32000
-        else:
+        split_size = len(split.keys()) // 10
+        start = split_size * (subepoch)
+        end = split_size * (subepoch+1)
+        if self.use_mini_dataset:
             start = 0
-            end = np.inf
-            if self.use_mini_dataset:
-                start = 0
-                end = 5000
+            end = 32000
 
         for i in split.keys():  
             if i < start or i >= end:

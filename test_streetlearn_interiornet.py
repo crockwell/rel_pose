@@ -222,11 +222,6 @@ if __name__ == '__main__':
         Ps = SE3(poses)
 
         Gs = SE3.IdentityLike(Ps)
-
-        N=2
-        graph = OrderedDict()
-        for ll in range(N):
-            graph[ll] = [j for j in range(N) if ll!=j and abs(ll-j) <= 2]
                     
         with torch.no_grad():
             poses_est = model(images, Gs, intrinsics=intrinsics)

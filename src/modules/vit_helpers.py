@@ -2,18 +2,14 @@
 
 Hacked together by / Copyright 2020 Ross Wightman
 """
-import logging
 import os
-import math
 import collections.abc
 from itertools import repeat
-from collections import OrderedDict
 from copy import deepcopy
 from typing import Any, Callable, Optional, Tuple
 
 import torch
 import torch.nn as nn
-from torch.hub import load_state_dict_from_url
 
 # From PyTorch internals
 def _ntuple(n):
@@ -114,9 +110,6 @@ def build_model_with_cfg(
         default_cfg: dict,
         model_cfg: Optional[Any] = None,
         feature_cfg: Optional[dict] = None,
-        pretrained_strict: bool = True,
-        pretrained_filter_fn: Optional[Callable] = None,
-        pretrained_custom_load: bool = False,
         kwargs_filter: Optional[Tuple[str]] = None,
         **kwargs):
     """ Build model with specified default_cfg and optional model_cfg
@@ -134,9 +127,6 @@ def build_model_with_cfg(
         default_cfg (dict): model's default pretrained/task config
         model_cfg (Optional[Dict]): model's architecture config
         feature_cfg (Optional[Dict]: feature extraction adapter config
-        pretrained_strict (bool): load pretrained weights strictly
-        pretrained_filter_fn (Optional[Callable]): filter callable for pretrained weights
-        pretrained_custom_load (bool): use custom load fn, to load numpy or other non PyTorch weights
         kwargs_filter (Optional[Tuple]): kwargs to filter before passing to model
         **kwargs: model args passed through to model __init__
     """

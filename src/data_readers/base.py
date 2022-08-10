@@ -18,24 +18,25 @@ from .augmentation import RGBDAugmentor
 
 class RGBDDataset(data.Dataset):
     def __init__(self, name, datapath, reshape_size=[384,512], subepoch=None, \
-                is_training=True, gpu=0, use_fixed_intrinsics=False, 
-                streetlearn_interiornet_type=None,
+                is_training=True, gpu=0, streetlearn_interiornet_type=None,
                 use_mini_dataset=False):
         """ Base class for RGBD dataset """
         self.root = datapath
         self.name = name
         self.streetlearn_interiornet_type = streetlearn_interiornet_type
         
-        self.aug = RGBDAugmentor(reshape_size=reshape_size, 
-            use_fixed_intrinsics=use_fixed_intrinsics, datapath=datapath)
-        print(self.name)
+        self.aug = RGBDAugmentor(reshape_size=reshape_size, datapath=datapath)
+
         self.matterport = False
-        if 'mp3d' in datapath:
+        if 'matterport' in datapath:
             self.matterport = True
             self.scene_info = self._build_dataset(subepoch==10)
         elif 'StreetLearn' in self.name or 'InteriorNet' in self.name:
             self.use_mini_dataset = use_mini_dataset
             self.scene_info = self._build_dataset(subepoch)
+        else:
+            print("not currently setup in case have other dataset type!")
+            import pdb; pdb.set_trace()
 
     @staticmethod
     def image_read(image_file):

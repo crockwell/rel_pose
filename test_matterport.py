@@ -131,11 +131,6 @@ if __name__ == '__main__':
         poses = np.vstack([base_pose, base_pose]).astype(np.float32)
         poses = torch.from_numpy(poses).unsqueeze(0).cuda()
         Gs = SE3(poses)
-
-        N=2
-        graph = OrderedDict()
-        for ll in range(N):
-            graph[ll] = [j for j in range(N) if ll!=j and abs(ll-j) <= 2]
                     
         with torch.no_grad():
             poses_est = model(images, Gs, intrinsics=intrinsics)
@@ -159,11 +154,6 @@ if __name__ == '__main__':
 
         predictions['camera']['preds']['tran'].append(preds[:3])
         predictions['camera']['preds']['rot'].append(preds[3:])
-
-        np.set_printoptions(suppress=True)
-        # print(preds[3:], gt_rotation)
-        # print(preds[:3], dset['data'][i]['rel_pose']['position'])
-        # import pdb; pdb.set_trace()
 
     camera_metrics = eval_camera(predictions)
     for k in camera_metrics:

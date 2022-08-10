@@ -43,6 +43,8 @@ class Matterport(RGBDDataset):
             
             rel_pose = np.array(split['data'][i]['rel_pose']['position'] + split['data'][i]['rel_pose']['rotation'])
             og_rel_pose = np.copy(rel_pose)
+
+            # on matterport, we scale depths to balance rot & trans loss
             rel_pose[:3] /= Matterport.DEPTH_SCALE
             cprp = np.copy(rel_pose)
             rel_pose[6] = cprp[3] # swap 3 & 6, we want W last for consistency with our other datasets

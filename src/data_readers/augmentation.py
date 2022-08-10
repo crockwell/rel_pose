@@ -7,8 +7,7 @@ import torch.nn.functional as F
 class RGBDAugmentor:
     """ perform augmentation on RGB-D video """
 
-    def __init__(self, reshape_size, use_fixed_intrinsics=False,
-                    datapath=None):
+    def __init__(self, reshape_size, datapath=None):
         self.reshape_size = reshape_size
         p_gray = 0.1
         self.augcolor = transforms.Compose([
@@ -16,12 +15,6 @@ class RGBDAugmentor:
             transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.4/3.14),
             transforms.RandomGrayscale(p=p_gray),
             transforms.ToTensor()])
-
-        self.use_fixed_intrinsics = use_fixed_intrinsics
-
-        self.streetlearn = False
-        if 'streetlearn' in datapath:
-            self.streetlearn = True
 
     def color_transform(self, images):
         """ color jittering """
@@ -33,17 +26,13 @@ class RGBDAugmentor:
     def __call__(self, images, poses, intrinsics):
         images = self.color_transform(images)
 
-        if self.streetlearn:
-            return images, poses, intrinsics
-
-        if hasattr(self, 'use_fixed_intrinsics') and self.use_fixed_intrinsics:
-            sizey, sizex = self.reshape_size
-            scalex = sizex / images.shape[-1]
-            scaley = sizey / images.shape[-2]
-            xidx = np.array([0,2])
-            yidx = np.array([1,3])
-            intrinsics[:,xidx] = scalex * intrinsics[:,xidx]
-            intrinsics[:,yidx] = scaley * intrinsics[:,yidx]
+        sizey, sizex = self.reshape_size
+        scalex = sizex / images.shape[-1]
+        scaley = sizey / images.shape[-2]
+        xidx = np.array([0,2])
+        yidx = np.array([1,3])
+        intrinsics[:,xidx] = scalex * intrinsics[:,xidx]
+        intrinsics[:,yidx] = scaley * intrinsics[:,yidx]
             
         images = F.interpolate(images, size=self.reshape_size)
         return images, poses, intrinsics

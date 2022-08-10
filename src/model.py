@@ -50,8 +50,10 @@ class ViTEss(nn.Module):
             self.fusion_transformer.cls_token = None
             self.pos_encoding = None
 
+            # we overwrite pos_embedding as we don't have class token
             self.fusion_transformer.pos_embed = nn.Parameter(torch.zeros([1,self.num_patches,self.total_num_features])) 
-            nn.init.xavier_uniform_(self.fusion_transformer.pos_embed) # TODO: change!
+            # randomly initialize as usual 
+            nn.init.xavier_uniform_(self.fusion_transformer.pos_embed) 
 
             pos_enc = 6
             if args.no_pos_encoding or self.noess:
