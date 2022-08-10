@@ -61,6 +61,14 @@ sh scripts/train_streetlearn.sh
 sh scripts/train_streetlearn_t.sh
 ```
 
+## Small Data
+
+To train with small data, simply add the argument `--use_mini_dataset` to train script; eval is unchanged.
+
+Pretrained models trained on the small InteriorNet and StreetLearn datasets are here.
+```
+wget https://fouheylab.eecs.umich.edu/~cnris/rel_pose/modelcheckpoints/pretrained_models_mini_dataset.zip --no-check-certificate
+```
 
 ## Citation
 If you use this code for your research, please consider citing:
