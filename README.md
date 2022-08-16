@@ -39,7 +39,7 @@ wget https://fouheylab.eecs.umich.edu/~jinlinyi/2021/sparsePlanesICCV21/split/mp
 wget https://fouheylab.eecs.umich.edu/~jinlinyi/2021/sparsePlanesICCV21/data/rgb.zip
 unzip mp3d_planercnn_json.zip; unzip rgb.zip
 ```
-- You'll need to update `scripts/export_paths.sh` to root directories once datasets are setup.
+- You'll need to update `MATTERPORT_PATH` and `INTERIORNET_STREETLEARN_PATH` to root directories once datasets are setup.
 
 Evaluation scripts are as follows:
 ```
