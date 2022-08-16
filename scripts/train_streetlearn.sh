@@ -2,8 +2,6 @@
 export INTERIORNET_STREETLEARN_PATH=/home/cnris/vl/ExtremeRotation_code
 
 EXPNAME=streetlearn
-POOL_SIZE=60
-WEIGHTS=120000.pth
 
 nice -n 19 python train.py --name ${EXPNAME} --gpus=10 --batch=6 \
         --lr=5e-4 --fusion_transformer --transformer_depth 6 \

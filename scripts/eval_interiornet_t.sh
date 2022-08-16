@@ -8,7 +8,6 @@ export INTERIORNET_STREETLEARN_PATH=/home/cnris/vl/ExtremeRotation_code
 CKPT=pretrained_models/interiornet_t.pth
 
 EXPNAME=interiornet_t
-POOL_SIZE=60
 
 nice -n 19 python test_streetlearn_interiornet.py --exp ${EXPNAME} --transformer_depth 6 \
         --fusion_transformer --ckpt $CKPT \

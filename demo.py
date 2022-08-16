@@ -66,7 +66,13 @@ if __name__ == '__main__':
     images = np.stack(images).astype(np.float32)
     images = torch.from_numpy(images).float()
     images = images.permute(0, 3, 1, 2)
-    images = F.interpolate(images, size=[384,512])
+
+    if "matterport" in args.ckpt:
+        # following matterport data preprocessing we used during training
+        images = F.interpolate(images, size=[384,512])
+    else:
+        # images are already correct size
+        pass
     images = images.unsqueeze(0).cuda()
 
     base_pose = np.array([0,0,0,0,0,0,1])
@@ -94,12 +100,21 @@ if __name__ == '__main__':
         print(preds[3:])
 
 
-# Expected outputs:
-# mp: [ 2.17275  0.1722  -0.87071  0.10733  0.00044  0.54702  0.83021] (image pair 301)
-# ground truth: 
+########## Expected outputs ##########
 
-# in: [ 0.63364 -0.11078 -0.12625  0.75518] (image pair 245)
-# ground truth: 
+# Matterport: image pair 5ZKStnWn8Zo/0_11_11.png 
+#                        5ZKStnWn8Zo/0_11_51.png
+# pred: [ 2.17275  0.1722   -0.87071  0.10733  0.00044  0.54702  0.83021] 
+# gt:   [ 2.73153  0.25285  -1.35598  0.10905  0.00000  0.56102  0.82059]
 
-# sl: [0.40741 0.257   0.18473 0.85665] (image pair 138)
-# ground truth: 
+
+# InteriorNet-T: image pair HD1/3FO4K4086OLR/original_7_7/0000000028151666688/043.png
+#                           HD1/3FO4K4086OLR/original_1_1/0000000028111667200/010.png
+# pred: [ 0.62947 -0.11058 -0.12595  0.75873]
+# gt:   [ 0.62734 -0.12698 -0.11345  0.75990]
+
+
+# Streetlearn-T: image pair  Ruy-1-EbfKAhoIQ6cNa5cw/078.png
+#                            dcz-r3Si40Ptxdf2KwPalA/005.png
+# pred: [ 0.39714  0.25738  0.18597  0.86108]
+# gt:   [ 0.39073  0.27050  0.19321  0.85838]
