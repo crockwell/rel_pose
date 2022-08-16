@@ -68,6 +68,7 @@ To train with small data, simply add the argument `--use_mini_dataset` to train 
 Pretrained models trained on the small InteriorNet and StreetLearn datasets are here.
 ```
 wget https://fouheylab.eecs.umich.edu/~cnris/rel_pose/modelcheckpoints/pretrained_models_mini_dataset.zip --no-check-certificate
+unzip pretrained_models_mini_dataset.zip
 ```
 
 ## Citation
