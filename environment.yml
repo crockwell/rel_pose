@@ -2,21 +2,19 @@ name: rel_pose
 channels:
   - rusty1s
   - pytorch
-  - open3d-admin
   - nvidia
   - conda-forge
   - defaults
 dependencies:
-  - pytorch-scatter
-  - torchaudio
   - torchvision
-  - open3d
-  - pytorch='1.8.1+cu102'
+  - pytorch=1.8.1
   - cudatoolkit=11.1
   - tensorboard
   - scipy
   - opencv
   - tqdm
-  - suitesparse
   - matplotlib
-  - pyyaml
+  - pip
+  - pip:
+    - timm==0.4.12
+    - lietorch==0.2
