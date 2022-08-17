@@ -14,10 +14,6 @@ Eight-Point algorithm. The resulting mix of visual and positional features is a 
 ## Installation and Demo
 
 Anaconda install:
-```
-conda env create -f environment.yml
-pip3 install git+https://github.com/princeton-vl/lietorch.git
-```
 - You'll need to build lietorch using c++; the c++ version needs to be compatable with the version g++ which built Pytorch.
 - My setup steps on a GTX 1080 Ti (gcc 8.4.0, CUDA 10.2):
   - conda create -n rel_pose python=3.9
