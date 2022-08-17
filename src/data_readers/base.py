@@ -74,7 +74,6 @@ class RGBDDataset(data.Dataset):
                     images_list = self.scene_info['images'][local_index]
                     poses = self.scene_info['poses'][local_index]
                     intrinsics = self.scene_info['intrinsics'][local_index]
-                    angles = self.scene_info['angles'][local_index]
 
                     images = []
                     for i in range(2):
@@ -82,7 +81,6 @@ class RGBDDataset(data.Dataset):
 
                     poses = np.stack(poses).astype(np.float32)
                     intrinsics = np.stack(intrinsics).astype(np.float32)
-                    angles = np.stack(angles).astype(np.float32)
                     
                     images = np.stack(images).astype(np.float32)
                     images = torch.from_numpy(images).float()
@@ -93,7 +91,7 @@ class RGBDDataset(data.Dataset):
 
                     images, poses, intrinsics = self.aug(images, poses, intrinsics)
                     
-                    return images, poses, intrinsics, angles
+                    return images, poses, intrinsics
                 except:
                     local_index += 1
                     continue
