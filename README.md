@@ -15,13 +15,22 @@ Eight-Point algorithm. The resulting mix of visual and positional features is a 
 
 Anaconda install:
 ```
-conda install environment.yml
+conda env create -f environment.yml
+pip3 install git+https://github.com/princeton-vl/lietorch.git
 ```
+- You'll need to build lietorch using c++; the c++ version needs to be compatable with the version g++ which built Pytorch.
+- My setup steps on a GTX 1080 Ti (gcc 8.4.0, CUDA 10.2):
+  - conda create -n rel_pose python=3.9
+  - conda activate rel_pose; pip3 install opencv-python; pip3 install tqdm; pip3 install PyYAML; 
+  - pip3 install torch==1.8.1+cu102 -f https://nelsonliu.me/files/pytorch/whl/torch_stable.html; pip3 install torchvision==0.9.1
+  - pip3 install git+https://github.com/princeton-vl/lietorch.git
+
 Download & extract pretrained models replicating paper results:
 ```
 wget https://fouheylab.eecs.umich.edu/~cnris/rel_pose/modelcheckpoints/pretrained_models.zip --no-check-certificate
 unzip pretrained_models.zip
 ```
+
 Demo script to predict pose on arbitrary image pair:
 ```
 python demo.py --img1 demo/matterport_1.png --img2 demo/matterport_2.png --ckpt pretrained_models/matterport.pth
@@ -74,7 +83,7 @@ unzip pretrained_models_mini_dataset.zip
 ## Citation
 If you use this code for your research, please consider citing:
 ```
-@inProceedings{Rockwell2021,
+@inProceedings{Rockwell2022,
   author = {Chris Rockwell and Justin Johnson and David F. Fouhey},
   title = {The 8-Point Algorithm as an Inductive Bias for Relative Pose Prediction by ViTs},
   booktitle = {3DV},
