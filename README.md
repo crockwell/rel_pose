@@ -20,6 +20,7 @@ Anaconda install:
   - conda activate rel_pose; pip3 install opencv-python; pip3 install tqdm; pip3 install PyYAML; 
   - pip3 install torch==1.8.1+cu102 -f https://nelsonliu.me/files/pytorch/whl/torch_stable.html; pip3 install torchvision==0.9.1
   - pip3 install git+https://github.com/princeton-vl/lietorch.git
+  - pip3 install scipy; pip3 install tensorboard
 
 Download & extract pretrained models replicating paper results:
 ```
