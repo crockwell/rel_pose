@@ -8,15 +8,12 @@ import json
 import shutil
 
 ### start inputs
-radius = 20
-line_width = 15
-epipolar_points_x = 3
-epipolar_points_y = 3
+curr_path1 = "demo/matterport_1.png"
+curr_path2 = "demo/matterport_2.png"
+rel_pose_input = np.array([2.17275, 0.1722, -0.87071, 0.00044, 0.54702, 0.10733, 0.83021]) # in format x,y,z,qx,qy,qz,qw
 
-with open('matterport/mp3d_planercnn_json/cached_set_test.json') as f:
-    dset = json.load(f)
-
-pair_indices = [301] # demo image pair is index 301
+out_path1_points = "demo/matterport_1_epipolar_points.png"
+out_path2_lines = "demo/matterport_2_epipolar_lines.png"
 
 INTRINSICS = torch.zeros(1,3,3).double()
 INTRINSICS[0,0,0] = 517.97
@@ -24,6 +21,11 @@ INTRINSICS[0,1,1] = 517.97
 INTRINSICS[0,0,2] = 320
 INTRINSICS[0,1,2] = 240
 INTRINSICS[0,2,2] = 1
+
+radius = 20
+line_width = 15
+epipolar_points_x = 3
+epipolar_points_y = 3
 
 ### end inputs
 
@@ -128,28 +130,6 @@ def get_epipolar(y, P):
 
     return m, b
 
-def get_paths(pair_idx):
-    path1 = os.path.join("matterport", '/'.join(str(dset['data'][pair_idx]['0']['file_name']).split('/')[6:]))
-    path2 = os.path.join("matterport", '/'.join(str(dset['data'][pair_idx]['1']['file_name']).split('/')[6:]))
-
-    rrot = dset['data'][pair_idx]['rel_pose']["rotation"]
-    rel_pose_input = np.array(dset['data'][pair_idx]['rel_pose']["position"] + [rrot[1],rrot[2],rrot[3],rrot[0]])
-
-    parent_dir = "epipolar_output/" + path1.split("/")[-2]
-    path1_split = path1.split("/")[-1][:-4]
-    path2_split = path2.split("/")[-1][:-4]
-
-    curr_path1 = parent_dir + "_" + path1_split + ".png"
-    curr_path2 = parent_dir + "_" + path2_split + ".png"
-    out_path1_points = parent_dir + "_" + path2_split + "/" + path1_split + "_points.png"
-    out_path2_lines_parent = parent_dir + "_" + path2_split + "/" + path2_split
-
-    os.makedirs(parent_dir + "_" + path2_split, exist_ok=True)
-    shutil.copyfile(path1, curr_path1)
-    shutil.copyfile(path2, curr_path2)
-
-    return curr_path1, curr_path2, out_path1_points, out_path2_lines_parent, rel_pose_input
-
 colors = [
         np.array([197, 27, 125]),  # 'pink': 
         np.array([215, 48, 39]),  #  'red': 
@@ -169,51 +149,43 @@ starty = -1 + 2/(epipolar_points_y+1)
 stopy = 1
 stepy = 2/(epipolar_points_y+1)
 
+# epipolar: dots on img 1
+image_bg = cv2.imread(curr_path1)
 
-for pair_idx in pair_indices:
-    (curr_path1, curr_path2, out_path1_points, out_path2_lines_parent, rel_pose_input) = get_paths(pair_idx)
+for y1 in np.arange(startx, stopx, stepx):
+    for y2 in np.arange(starty, stopy, stepy):
+        pctx = (y1-startx)/(stopx-startx)
+        pcty = (y2-starty)/(stopy-starty)
+        color_num = int(pctx*(epipolar_points_x-1)*epipolar_points_x + pcty*epipolar_points_y)# int((y1+.5)*2*3 + 2*(y2+.5))
+        color = ( int (colors[color_num] [ 0 ]), int (colors[color_num] [ 1 ]), int (colors[color_num] [ 2 ])) 
+        y1_img = int((y1 + 1)/2 * image_bg.shape[1])
+        y2_img = int((y2 + 1)/2 * image_bg.shape[0])
+        cv2.circle(image_bg, (y1_img, y2_img), radius, color, -1)
+cv2.imwrite(out_path1_points, image_bg)
 
-    # epipolar: dots on img 1
-    image_bg = cv2.imread(curr_path1)
+rel_pose = np.copy(rel_pose_input)
+tf_x = transform_x(np.pi)
+rel_pose = apply_transform(rel_pose, tf_x)
 
-    for y1 in np.arange(startx, stopx, stepx):
-        for y2 in np.arange(starty, stopy, stepy):
-            pctx = (y1-startx)/(stopx-startx)
-            pcty = (y2-starty)/(stopy-starty)
-            color_num = int(pctx*(epipolar_points_x-1)*epipolar_points_x + pcty*epipolar_points_y)# int((y1+.5)*2*3 + 2*(y2+.5))
-            color = ( int (colors[color_num] [ 0 ]), int (colors[color_num] [ 1 ]), int (colors[color_num] [ 2 ])) 
-            y1_img = int((y1 + 1)/2 * image_bg.shape[1])
-            y2_img = int((y2 + 1)/2 * image_bg.shape[0])
-            cv2.circle(image_bg, (y1_img, y2_img), radius, color, -1)
-    cv2.imwrite(out_path1_points, image_bg)
+# epipolar: lines across img 2
+image_bg = np.array(cv2.imread(curr_path2))
+image_epipolar = image_bg * 0
+img_width = image_bg.shape[1]
 
+for y1 in np.arange(startx, stopx, stepx):
+    for y2 in np.arange(starty, stopy, stepy):
+        pctx = (y1-startx)/(stopx-startx)
+        pcty = (y2-starty)/(stopy-starty)
+        color_num = int(pctx*(epipolar_points_x-1)*epipolar_points_x + pcty*epipolar_points_y)
+        color = ( int (colors[color_num] [ 0 ]), int (colors[color_num] [ 1 ]), int (colors[color_num] [ 2 ])) 
+        rot_mtx = pos_quat2SE(rel_pose).reshape([1,3,4])
+        y = np.array([(y1+1)/2*image_bg.shape[1],(y2+1)/2*image_bg.shape[0],1.0], dtype=np.float64)
+        m, b = get_epipolar(y, torch.from_numpy(rot_mtx))
 
-    out_path2_lines = out_path2_lines_parent + "_lines_rotx_pi.png"
-    rel_pose = np.copy(rel_pose_input)
+        x0, y0 = map(int, [0, b])
+        x_end, y_end = map(int, [img_width, b+m*img_width])
+        cv2.line(image_epipolar, (x0, y0), (x_end, y_end), color, line_width)
 
-    tf_x = transform_x(np.pi)
-
-    rel_pose = apply_transform(rel_pose, tf_x)
-
-    # epipolar: lines across img 2
-    image_bg = np.array(cv2.imread(curr_path2))
-    image_epipolar = image_bg * 0
-    img_width = image_bg.shape[1]
-
-    for y1 in np.arange(startx, stopx, stepx):
-        for y2 in np.arange(starty, stopy, stepy):
-            pctx = (y1-startx)/(stopx-startx)
-            pcty = (y2-starty)/(stopy-starty)
-            color_num = int(pctx*(epipolar_points_x-1)*epipolar_points_x + pcty*epipolar_points_y)
-            color = ( int (colors[color_num] [ 0 ]), int (colors[color_num] [ 1 ]), int (colors[color_num] [ 2 ])) 
-            rot_mtx = pos_quat2SE(rel_pose).reshape([1,3,4])
-            y = np.array([(y1+1)/2*image_bg.shape[1],(y2+1)/2*image_bg.shape[0],1.0], dtype=np.float64)
-            m, b = get_epipolar(y, torch.from_numpy(rot_mtx))
-
-            x0, y0 = map(int, [0, b])
-            x_end, y_end = map(int, [img_width, b+m*img_width])
-            cv2.line(image_epipolar, (x0, y0), (x_end, y_end), color, line_width)
-
-    image = cv2.addWeighted(image_epipolar,0.6,image_bg,0.8,0) 
-    cv2.imwrite(out_path2_lines, image)
+image = cv2.addWeighted(image_epipolar,0.6,image_bg,0.8,0) 
+cv2.imwrite(out_path2_lines, image)
 
