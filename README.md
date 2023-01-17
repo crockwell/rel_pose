@@ -85,7 +85,7 @@ unzip pretrained_models_mini_dataset.zip
 ## Coordinate Convention
 - Our Matterport-trained model follows the habitat camera coordinate convention. The circle represents "in towards you"
 
-<img src="habitat_convention.png" alt="drawing">
+<img src="habitat.png" alt="drawing">
 
 ## Citation
 If you use this code for your research, please consider citing:
