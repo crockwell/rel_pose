@@ -89,6 +89,7 @@ if __name__ == '__main__':
     if "matterport" in args.ckpt:
         DEPTH_SCALE = 5
         preds[:3] = preds[:3] * DEPTH_SCALE # undo scale change we made during training
+        preds[3:] = np.array([pr_copy[4],pr_copy[5],pr_copy[3],pr_copy[6]]) # on Matterport we predict in format yzxw, want xyzw
 
     np.set_printoptions(suppress=True)
     np.set_printoptions(precision=5)
@@ -104,8 +105,8 @@ if __name__ == '__main__':
 
 # Matterport: image pair 5ZKStnWn8Zo/0_11_11.png 
 #                        5ZKStnWn8Zo/0_11_51.png
-# pred: [ 2.17275  0.1722   -0.87071  0.10733  0.00044  0.54702  0.83021] 
-# gt:   [ 2.73153  0.25285  -1.35598  0.10905  0.00000  0.56102  0.82059]
+# pred: [ 2.17275  0.1722   -0.87071  0.00044  0.54702  0.10733  0.83021] 
+# gt:   [ 2.73153  0.25285  -1.35598  0.00000  0.56102  0.10905  0.82059]
 
 
 # InteriorNet-T: image pair HD1/3FO4K4086OLR/original_7_7/0000000028151666688/043.png
