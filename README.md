@@ -35,6 +35,11 @@ python demo.py --img1 demo/interiornet_t_1.png --img2 demo/interiornet_t_2.png -
 python demo.py --img1 demo/streetlearn_t_1.png --img2 demo/streetlearn_t_2.png --ckpt pretrained_models/streetlearn_t.pth
 ```
 
+Script to generate epipolar lines: (please modify pose / image pair inside script)
+```
+python generate_epipolar_imgs.py
+```
+
 ## Evaluation
 
 Download and setup data following the steps of [Jin et al.](https://github.com/jinlinyi/SparsePlanes/blob/main/docs/data.md) (Matterport) and [Cai et al.](https://github.com/RuojinCai/ExtremeRotation_code) (InteriorNet and StreetLearn). 
@@ -76,6 +81,11 @@ Pretrained models trained on the small InteriorNet and StreetLearn datasets are 
 wget https://fouheylab.eecs.umich.edu/~cnris/rel_pose/modelcheckpoints/pretrained_models_mini_dataset.zip --no-check-certificate
 unzip pretrained_models_mini_dataset.zip
 ```
+
+## Coordinate Convention
+- Our Matterport-trained model follows the habitat camera coordinate convention. The circle represents "in towards you"
+
+<img src="habitat_convention.png" alt="drawing">
 
 ## Citation
 If you use this code for your research, please consider citing:
